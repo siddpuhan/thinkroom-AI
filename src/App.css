@@ -318,3 +318,44 @@ body {
 .chat-send-button:active:not(:disabled) {
   transform: scale(0.95);
 }
+
+@keyframes pulseRed {
+  0% { background-color: #dc2626; }
+  50% { background-color: #b91c1c; }
+  100% { background-color: #dc2626; }
+}
+
+.offline-pulse {
+  animation: pulseRed 2s infinite;
+}
+
+.network-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #f8fafc;
+  transition: all 0.3s ease;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+.status-dot.strong { color: #22c55e; background-color: #22c55e; }
+.status-dot.unstable { color: #eab308; background-color: #eab308; }
+.status-dot.poor { color: #f97316; background-color: #f97316; }
+.status-dot.offline { color: #dc2626; background-color: #dc2626; }
+
+.queued-count {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  margin-left: 4px;
+}
