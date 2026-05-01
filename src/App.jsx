@@ -10,6 +10,7 @@ import { clearOfflineMessages, getOfflineMessages, queueOfflineMessage, saveOffl
 import './App.css';
 import LandingPage from './LandingPage';
 import ResourceBoard from './ResourceBoard';
+import NetworkStatus from './components/NetworkStatus';
 
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin.replace(/:\d+$/, ':5000');
@@ -140,6 +141,28 @@ function ChatPage() {
         user.primaryEmailAddress?.emailAddress || 
         'Anonymous';
       currentUserEmailRef.current = user.primaryEmailAddress?.emailAddress || null;
+
+      // Sync user to Supabase users table
+      const syncUserToDB = async () => {
+        try {
+          const token = await getToken();
+          await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/users/sync`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              id: user.id,
+              name: currentUserNameRef.current,
+              email: currentUserEmailRef.current
+            })
+          });
+        } catch (error) {
+          console.error('Failed to sync user to database:', error);
+        }
+      };
+      syncUserToDB();
     }
   }, [user]);
 
@@ -149,6 +172,7 @@ function ChatPage() {
   const [messageError, setMessageError] = useState('');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [mode, setMode] = useState(navigator.onLine ? 'server' : 'offline');
+  const [queuedCount, setQueuedCount] = useState(0);
   const [roomInput, setRoomInput] = useState('');
   const [activeRoom, setActiveRoom] = useState('');
   const messageListRef = useRef(null);
@@ -241,6 +265,11 @@ function ChatPage() {
   useEffect(() => {
     setMode(isOnline ? 'server' : 'offline');
   }, [isOnline]);
+
+  useEffect(() => {
+    const queuedMessages = getOfflineMessages(activeRoomRef.current);
+    setQueuedCount(queuedMessages.length);
+  }, [activeRoom, messages, isOnline]);
 
   useEffect(() => {
     console.log('MODE CHANGED:', mode);
@@ -486,9 +515,7 @@ function ChatPage() {
       <header className="chat-header">
         <h1>Disaster Connect {activeRoom ? `- Room: ${activeRoom}` : '- Global Chat'}</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button onClick={simulateIncomingMessage} className="chat-button-subtle">
-            Simulate Incoming
-          </button>
+          <NetworkStatus queuedCount={queuedCount} />
           <UserButton afterSignOutUrl="/" />
         </div>
       </header>
