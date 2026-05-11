@@ -2,29 +2,42 @@
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 :root {
-  --background: #000000;
-  --primary: #FF5722;
-  --primary-fixed-dim: #FF5722;
-  --on-background: #FFFFFF;
-  --surface-container-low: #080808;
-  --surface-container-high: #111111;
-  --surface-container-highest: #1a1a1a;
-  --on-surface-variant: #cccccc;
-  --error: #FF0000;
+  --lp-background: #000000;
+  --lp-primary: #FF5722;
+  --lp-primary-fixed-dim: #FF5722;
+  --lp-on-background: #FFFFFF;
+  --lp-surface-container-low: #080808;
+  --lp-surface-container-high: #111111;
+  --lp-surface-container-highest: #1a1a1a;
+  --lp-on-surface-variant: #cccccc;
+  --lp-error: #FF0000;
 
   --font-headline: 'Space Grotesk', sans-serif;
   --font-body: 'Inter', sans-serif;
   --font-mono: 'Roboto Mono', monospace;
 }
 
+[data-theme="light"] {
+  --lp-background: #FFFFFF;
+  --lp-primary: #FF5722;
+  --lp-primary-fixed-dim: #FF5722;
+  --lp-on-background: #000000;
+  --lp-surface-container-low: #f8f9fa;
+  --lp-surface-container-high: #e9ecef;
+  --lp-surface-container-highest: #dee2e6;
+  --lp-on-surface-variant: #6c757d;
+  --lp-error: #FF0000;
+}
+
 /* Base styles and variables */
 .lp-container {
-  background-color: var(--background);
-  color: var(--on-background);
+  background-color: var(--lp-background);
+  color: var(--lp-on-background);
   font-family: var(--font-body);
   overflow-x: hidden;
   position: relative;
   min-height: 100vh;
+  transition: background-color 0.3s, color 0.3s;
 }
 
 .lp-container * {
@@ -79,8 +92,8 @@
   top: 0;
   width: 100%;
   z-index: 50;
-  border-bottom: 4px solid var(--primary);
-  background-color: #000;
+  border-bottom: 4px solid var(--lp-primary);
+  background-color: var(--lp-background);
   display: flex;
   justify-content: space-between;
   align-items: center;

@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+dotenv.config();
 import { createServer } from "http";
 import { Server } from "socket.io";
 
@@ -8,8 +9,9 @@ import connectDB from "./config/db.js";
 import messageRoutes from "./routes/messageRoutes.js";
 import resourceRoutes from "./routes/resourceRoutes.js";
 import { syncUser } from "./controllers/userController.js";
+import { processThinkRoomAI } from "./controllers/aiController.js";
 
-dotenv.config();
+
 
 const corsOptions = {
   origin: true,
@@ -99,6 +101,12 @@ io.on("connection", (socket) => {
 
   socket.on("send_message", ({ roomId, message }) => {
     io.to(roomId).emit("receive_message", message);
+
+    // Vibe Check: If message starts with @ai, trigger ThinkRoom AI
+    const messageText = message.text || message.content;
+    if (messageText && messageText.trim().startsWith('@ai')) {
+      processThinkRoomAI(roomId, messageText, io);
+    }
   });
 
   socket.on("message-delivered", ({ clientId, senderSocketId }) => {
