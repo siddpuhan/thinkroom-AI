@@ -32,3 +32,5 @@ server/database.db-wal
 
 # Local backend environment (do not commit real config)
 server/.env
+.env
+.env.local
