@@ -1,12 +1,23 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ path: new URL('../../.env', import.meta.url) });
 
 const { Pool } = pg;
 
+const rawDatabaseUrl = process.env.DATABASE_URL;
+const trimmedDatabaseUrl = rawDatabaseUrl ? rawDatabaseUrl.trim().replace(/^"(.+)"$/, '$1') : '';
+const databaseUrl = trimmedDatabaseUrl
+  ? trimmedDatabaseUrl.replace(/([?&])sslmode=[^&]*(&|$)/, (match, leading, trailing) => (leading === '?' && trailing ? '?' : leading === '?' ? '' : leading))
+  : '';
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is not set. Add it to the root .env file.');
+}
+
 // Connect to PostgreSQL using Supabase connection string from environment variables
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl,
+  ssl: { rejectUnauthorized: false },
 });
 
 const connectDB = async () => {
@@ -49,7 +60,18 @@ const connectDB = async () => {
     console.log("PostgreSQL connected successfully");
     client.release();
   } catch (error) {
-    console.error("PostgreSQL connection error:", error.message);
+    let dbHost = 'unknown';
+    let dbUser = 'unknown';
+    try {
+      const dbUrl = new URL(databaseUrl);
+      dbHost = dbUrl.host;
+      dbUser = dbUrl.username;
+    } catch {
+      // Ignore URL parsing errors; report unknown host.
+    }
+    console.error('PostgreSQL connection error:', error.message || error);
+    console.error('DATABASE_URL host:', dbHost);
+    console.error('DATABASE_URL user:', dbUser);
     process.exit(1);
   }
 };

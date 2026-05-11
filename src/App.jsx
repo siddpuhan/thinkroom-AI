@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { SignedIn, SignedOut, RedirectToSignIn, useAuth, useUser, UserButton } from '@clerk/clerk-react';
@@ -11,6 +11,7 @@ import './App.css';
 import LandingPage from './LandingPage';
 import ResourceBoard from './ResourceBoard';
 import NetworkStatus from './components/NetworkStatus';
+import ThemeContext, { ThemeProvider } from './context/ThemeContext';
 
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin.replace(/:\d+$/, ':5000');
@@ -69,43 +70,45 @@ function App() {
   const navigate = useNavigate();
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <LandingPage
-            onEnterChat={() => navigate('/chat')}
-            onEnterResources={() => navigate('/resources')}
-          />
-        }
-      />
-      <Route 
-        path="/chat" 
-        element={
-          <>
-            <SignedIn>
-              <ChatPage />
-            </SignedIn>
-            <SignedOut>
-              <RedirectToSignIn />
-            </SignedOut>
-          </>
-        } 
-      />
-      <Route 
-        path="/resources" 
-        element={
-          <>
-            <SignedIn>
-              <ResourceBoard onBack={() => navigate('/')} />
-            </SignedIn>
-            <SignedOut>
-              <RedirectToSignIn />
-            </SignedOut>
-          </>
-        } 
-      />
-    </Routes>
+    <ThemeProvider>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <LandingPage
+              onEnterChat={() => navigate('/chat')}
+              onEnterResources={() => navigate('/resources')}
+            />
+          }
+        />
+        <Route 
+          path="/chat" 
+          element={
+            <>
+              <SignedIn>
+                <ChatPage />
+              </SignedIn>
+              <SignedOut>
+                <RedirectToSignIn />
+              </SignedOut>
+            </>
+          } 
+        />
+        <Route 
+          path="/resources" 
+          element={
+            <>
+              <SignedIn>
+                <ResourceBoard onBack={() => navigate('/')} />
+              </SignedIn>
+              <SignedOut>
+                <RedirectToSignIn />
+              </SignedOut>
+            </>
+          } 
+        />
+      </Routes>
+    </ThemeProvider>
   );
 }
 
@@ -126,6 +129,7 @@ const StatusBadge = ({ mode }) => {
 function ChatPage() {
   const { user } = useUser();
   const { getToken } = useAuth();
+  const { theme, toggleTheme } = useContext(ThemeContext);
   
   const currentUserIdRef = useRef(null);
   const currentUserId = user?.id;
@@ -162,23 +166,25 @@ function ChatPage() {
           console.error('Failed to sync user to database:', error);
         }
       };
-      syncUserToDB();
-    }
-  }, [user]);
+       syncUserToDB();
+     }
+   }, [user]);
 
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [messageError, setMessageError] = useState('');
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [mode, setMode] = useState(navigator.onLine ? 'server' : 'offline');
-  const [queuedCount, setQueuedCount] = useState(0);
-  const [roomInput, setRoomInput] = useState('');
-  const [activeRoom, setActiveRoom] = useState('');
-  const messageListRef = useRef(null);
-  const socketRef = useRef(null);
-  const isSyncingOfflineRef = useRef(false);
-  const activeRoomRef = useRef('');
+     const [messages, setMessages] = useState([]);
+     const [newMessage, setNewMessage] = useState('');
+     const [loadingMessages, setLoadingMessages] = useState(false);
+     const [messageError, setMessageError] = useState('');
+     const [isOnline, setIsOnline] = useState(navigator.onLine);
+     const [mode, setMode] = useState(navigator.onLine ? 'server' : 'offline');
+     const [queuedCount, setQueuedCount] = useState(0);
+     const [roomInput, setRoomInput] = useState('');
+     const [activeRoom, setActiveRoom] = useState('');
+     const [rooms, setRooms] = useState([]);
+     const [isThinking, setIsThinking] = useState(false);
+    const messageListRef = useRef(null);
+    const socketRef = useRef(null);
+    const isSyncingOfflineRef = useRef(false);
+    const activeRoomRef = useRef('');
 
   useEffect(() => {
     activeRoomRef.current = activeRoom;
@@ -190,14 +196,16 @@ function ChatPage() {
     console.log('navigator.onLine (initial):', navigator.onLine);
   }, []);
 
-  useEffect(() => {
-    const savedRoom = localStorage.getItem("roomId");
-    if (savedRoom) {
-      setRoomInput(savedRoom);
-      setActiveRoom(savedRoom);
-      activeRoomRef.current = savedRoom;
-    }
-  }, []);
+   useEffect(() => {
+     const savedRoom = localStorage.getItem("roomId");
+     if (savedRoom) {
+       setRoomInput(savedRoom);
+       setActiveRoom(savedRoom);
+       activeRoomRef.current = savedRoom;
+       // Initialize rooms with the saved room
+       setRooms([savedRoom]);
+     }
+   }, []);
 
 
   useEffect(() => {
@@ -282,6 +290,12 @@ function ChatPage() {
     const socket = socketRef.current;
     const handler = (msg) => {
       if (msg.room_id !== activeRoom && msg.roomId !== activeRoom && msg.room !== activeRoom) return;
+      
+      // If the AI replied, stop the thinking animation
+      if (msg.sender_name === 'ThinkRoom AI') {
+        setIsThinking(false);
+      }
+      
       setMessages((prev) => addMessageIfMissing(prev, { ...msg, status: msg.status || 'delivered' }));
     };
 
@@ -372,17 +386,24 @@ function ChatPage() {
 
 
   useEffect(() => {
-    if (messageListRef.current) {
-      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    const el = messageListRef.current;
+    if (!el) return;
+    // Only auto-scroll if user is already near the bottom (within 150px)
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    if (isNearBottom) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
     }
-  }, [messages]);
+  }, [messages, isThinking]);
 
 
-  const handleSendMessage = async (e) => {
+  const handleSendMessage = async (e, messageOverride = null) => {
     e.preventDefault();
-    if (newMessage.trim() === '') return;
+    const rawMessage = typeof messageOverride === 'string' ? messageOverride : newMessage;
+    if (rawMessage.trim() === '') return;
 
-    const textToSend = newMessage.trim();
+    const textToSend = rawMessage.trim();
     const clientId = generateUUID();
     const tempMessage = {
       id: clientId,
@@ -397,8 +418,15 @@ function ChatPage() {
     };
 
     setMessages((prevMessages) => [...prevMessages, tempMessage]);
-    setNewMessage('');
+    if (messageOverride === null) {
+      setNewMessage('');
+    }
     setMessageError('');
+
+    // If message starts with @ai, show thinking indicator
+    if (textToSend.startsWith('@ai')) {
+      setIsThinking(true);
+    }
 
     if (mode === 'server') {
       try {
@@ -480,23 +508,31 @@ function ChatPage() {
     }
   };
 
-  const handleJoinRoom = () => {
-    const roomId = roomInput.trim();
-    if (!roomId || !socketRef.current) {
-      return;
-    }
+   const handleJoinRoom = () => {
+     const roomId = roomInput.trim();
+     if (!roomId || !socketRef.current) {
+       return;
+     }
 
-    if (activeRoomRef.current) {
-      socketRef.current.emit("leave-room", activeRoomRef.current);
-    }
+     if (activeRoomRef.current) {
+       socketRef.current.emit("leave-room", activeRoomRef.current);
+     }
 
-    console.log('Joining room:', roomId);
-    activeRoomRef.current = roomId;
-    setMessages([]);
-    setActiveRoom(roomId);
-    localStorage.setItem("roomId", roomId);
-    socketRef.current.emit('join-room', roomId);
-  };
+     console.log('Joining room:', roomId);
+     activeRoomRef.current = roomId;
+     setMessages([]);
+     setActiveRoom(roomId);
+     localStorage.setItem("roomId", roomId);
+     socketRef.current.emit('join-room', roomId);
+     
+     // Add room to rooms list if not already present
+     setRooms(prevRooms => {
+       if (!prevRooms.includes(roomId)) {
+         return [...prevRooms, roomId];
+       }
+       return prevRooms;
+     });
+   };
 
   const handleLeaveRoom = () => {
     if (activeRoomRef.current && socketRef.current) {
@@ -509,16 +545,31 @@ function ChatPage() {
     localStorage.removeItem("roomId");
   };
 
+  const handleRecap = () => {
+    if (!activeRoom) return;
+    
+    const recapMessage = "@ai Give me a 3-sentence summary of what has been discussed in this room so far.";
+    
+    handleSendMessage({ preventDefault: () => {} }, recapMessage);
+  };
+
   return (
     <div className="chat-page-container">
       <AnimatedBackground />
-      <header className="chat-header">
-        <h1>Disaster Connect {activeRoom ? `- Room: ${activeRoom}` : '- Global Chat'}</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <NetworkStatus queuedCount={queuedCount} />
-          <UserButton afterSignOutUrl="/" />
-        </div>
-      </header>
+       <header className="chat-header">
+         <h1>Disaster Connect {activeRoom ? `- Room: ${activeRoom}` : '- Global Chat'}</h1>
+         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+           <NetworkStatus queuedCount={queuedCount} />
+           <UserButton afterSignOutUrl="/" />
+           <button 
+             onClick={toggleTheme}
+             className="chat-button-subtle"
+             title="Toggle dark/light mode"
+           >
+             {theme === 'dark' ? '☀️' : '🌙'}
+           </button>
+         </div>
+       </header>
 
       <div className="chat-controls-bar">
         <div className="chat-controls">
@@ -532,6 +583,11 @@ function ChatPage() {
           <button type="button" className="chat-button" onClick={handleJoinRoom}>
             Join Room
           </button>
+          {activeRoom && (
+            <button type="button" className="recap-button" onClick={handleRecap}>
+              ✨ Catch Me Up
+            </button>
+          )}
           <button type="button" className="chat-button-secondary" onClick={handleLeaveRoom}>
             Leave Room
           </button>
@@ -539,46 +595,58 @@ function ChatPage() {
         <StatusBadge mode={mode} />
       </div>
 
-      <div className="chat-main-area">
-        <div className="chat-container">
-          <div className="message-list" ref={messageListRef}>
-            {loadingMessages ? (
-              <div className="empty-state">Loading messages...</div>
-            ) : messageError ? (
-              <div className="empty-state">{messageError}</div>
-            ) : messages.length > 0 ? (
-              messages.map((msg) => {
-                const isMine = msg.sender_id === currentUserId;
-                return (
-                  <MessageBubble
-                    key={msg.id ?? `${msg.created_at || msg.timestamp}-${msg.text}`}
-                    message={msg}
-                    isOwnMessage={isMine}
-                  />
-                );
-              })
-            ) : (
-              <div className="empty-state">
-                <h2>Welcome!</h2>
-                <p>No messages yet. Start the conversation or join a room.</p>
+        <div className="chat-main-area">
+          <div className="chat-container">
+            <div className="chat-content">
+              <div className="message-list" ref={messageListRef}>
+                {loadingMessages ? (
+                  <div className="empty-state">Loading messages...</div>
+                ) : messageError ? (
+                  <div className="empty-state">{messageError}</div>
+                ) : messages.length > 0 ? (
+                  messages.map((msg) => {
+                    const isMine = msg.sender_id === currentUserId;
+                    return (
+                      <MessageBubble
+                        key={msg.id ?? `${msg.created_at || msg.timestamp}-${msg.text}`}
+                        message={msg}
+                        isOwnMessage={isMine}
+                      />
+                    );
+                  })
+                ) : (
+                  <div className="empty-state">
+                    <h2>Welcome!</h2>
+                    <p>No messages yet. Start the conversation or join a room.</p>
+                  </div>
+                )}
+                {isThinking && (
+                  <div className="ai-thinking">
+                    <span>ThinkRoom AI is processing</span>
+                    <div className="thinking-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+              <form className="chat-input-form" onSubmit={handleSendMessage}>
+                <input
+                  type="text"
+                  className="chat-input-field"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Type a message..."
+                />
+                <button type="submit" className="chat-send-button" disabled={!newMessage.trim()}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+              </form>
+            </div>
           </div>
-          <form className="chat-input-form" onSubmit={handleSendMessage}>
-            <input
-              type="text"
-              className="chat-input-field"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type a message..."
-            />
-            <button type="submit" className="chat-send-button" disabled={!newMessage.trim()}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-            </button>
-          </form>
         </div>
-      </div>
     </div>
   );
 }
