@@ -1,4 +1,4 @@
-
+// Disaster Connect - Integrated with ThinkRoom AI
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
