@@ -398,11 +398,12 @@ function ChatPage() {
   }, [messages, isThinking]);
 
 
-  const handleSendMessage = async (e) => {
+  const handleSendMessage = async (e, messageOverride = null) => {
     e.preventDefault();
-    if (newMessage.trim() === '') return;
+    const rawMessage = typeof messageOverride === 'string' ? messageOverride : newMessage;
+    if (rawMessage.trim() === '') return;
 
-    const textToSend = newMessage.trim();
+    const textToSend = rawMessage.trim();
     const clientId = generateUUID();
     const tempMessage = {
       id: clientId,
@@ -417,7 +418,9 @@ function ChatPage() {
     };
 
     setMessages((prevMessages) => [...prevMessages, tempMessage]);
-    setNewMessage('');
+    if (messageOverride === null) {
+      setNewMessage('');
+    }
     setMessageError('');
 
     // If message starts with @ai, show thinking indicator
@@ -547,18 +550,7 @@ function ChatPage() {
     
     const recapMessage = "@ai Give me a 3-sentence summary of what has been discussed in this room so far.";
     
-    // Create a mock event to use handleSendMessage logic
-    const mockEvent = {
-      preventDefault: () => {},
-    };
-    
-    // We set newMessage manually and call the handler
-    setNewMessage(recapMessage);
-    // Since state update is async, we call the logic directly or use a temporary hack
-    // Best way is to refactor handleSendMessage to take text, but let's stick to the vibe
-    setTimeout(() => {
-      handleSendMessage(mockEvent);
-    }, 0);
+    handleSendMessage({ preventDefault: () => {} }, recapMessage);
   };
 
   return (
