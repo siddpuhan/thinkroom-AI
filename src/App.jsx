@@ -12,7 +12,10 @@ import LandingPage from './LandingPage';
 import ResourceBoard from './ResourceBoard';
 import NetworkStatus from './components/NetworkStatus';
 import ThemeContext, { ThemeProvider } from './context/ThemeContext';
-
+import { useChatStore } from './store/chatStore';
+import ChatInput from './components/ChatInput';
+import { AITaskWorkspace } from './components/tasks/AITaskWorkspace.jsx';
+import { WorkspaceToggleButton } from './components/tasks/WorkspaceToggleButton.jsx';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin.replace(/:\d+$/, ':5000');
 
@@ -130,6 +133,7 @@ function ChatPage() {
   const { user } = useUser();
   const { getToken } = useAuth();
   const { theme, toggleTheme } = useContext(ThemeContext);
+  const { streamingMessages, addStreamStart, appendStreamChunk, finalizeStream } = useChatStore();
   
   const currentUserIdRef = useRef(null);
   const currentUserId = user?.id;
@@ -181,6 +185,7 @@ function ChatPage() {
      const [activeRoom, setActiveRoom] = useState('');
      const [rooms, setRooms] = useState([]);
      const [isThinking, setIsThinking] = useState(false);
+     const [socketInstance, setSocketInstance] = useState(null); // live socket for child components
     const messageListRef = useRef(null);
     const socketRef = useRef(null);
     const isSyncingOfflineRef = useRef(false);
@@ -212,26 +217,41 @@ function ChatPage() {
     const socket = io(SOCKET_URL);
     socketRef.current = socket;
 
+    socket.on('connect', () => {
+      console.log('[SOCKET] Connected:', socket.id);
+      setSocketInstance(socket); // expose live socket to child components
+      if (activeRoomRef.current) {
+        socket.emit('join-room', activeRoomRef.current);
+      }
+    });
+
+    // If socket connects before the listener is registered (fast connections), set it immediately
+    if (socket.connected) {
+      setSocketInstance(socket);
+    }
+
     socket.on('connect_error', (error) => {
       console.error('Socket connection error:', error);
     });
 
-    socket.on('message-delivered', ({ clientId }) => {
-      if (!clientId) {
-        return;
-      }
-      setMessages((prevMessages) => markMessageStatus(prevMessages, clientId, 'delivered'));
+    socket.on('disconnect', () => {
+      console.log('[SOCKET] Disconnected');
+      setSocketInstance(null);
     });
 
-    if (activeRoomRef.current) {
-      socket.emit('join-room', activeRoomRef.current);
-    }
+    socket.on('message-delivered', ({ clientId }) => {
+      if (!clientId) return;
+      setMessages((prevMessages) => markMessageStatus(prevMessages, clientId, 'delivered'));
+    });
 
     return () => {
       socket.off('receive_message');
       socket.off('message-delivered');
+      socket.off('connect');
+      socket.off('disconnect');
       socket.disconnect();
       socketRef.current = null;
+      setSocketInstance(null);
     };
   }, []);
 
@@ -292,19 +312,45 @@ function ChatPage() {
       if (msg.room_id !== activeRoom && msg.roomId !== activeRoom && msg.room !== activeRoom) return;
       
       // If the AI replied, stop the thinking animation
-      if (msg.sender_name === 'ThinkRoom AI') {
+      if (msg.sender_name === 'ThinkRoom AI' || msg.personaId) {
         setIsThinking(false);
       }
       
       setMessages((prev) => addMessageIfMissing(prev, { ...msg, status: msg.status || 'delivered' }));
     };
 
+    const handleStreamStart = (data) => {
+      setIsThinking(false);
+      addStreamStart(data);
+    };
+    const handleStreamChunk = (data) => appendStreamChunk(data.messageId, data.chunk);
+    const handleStreamEnd = (data) => {
+      const msgData = useChatStore.getState().streamingMessages[data.messageId];
+      finalizeStream(data);
+      setMessages((prev) => addMessageIfMissing(prev, {
+        id: data.finalDbId,
+        text: data.text,
+        sender_name: msgData?.sender || "ThinkRoom AI",
+        created_at: data.created_at || new Date().toISOString(),
+        room_id: activeRoom,
+        status: 'delivered',
+        color: msgData?.color,
+        personaId: msgData?.personaId
+      }));
+    };
+
     socket.on("receive_message", handler);
+    socket.on("ai_stream_start", handleStreamStart);
+    socket.on("ai_stream_chunk", handleStreamChunk);
+    socket.on("ai_stream_end", handleStreamEnd);
 
     return () => {
       socket.off("receive_message", handler);
+      socket.off("ai_stream_start", handleStreamStart);
+      socket.off("ai_stream_chunk", handleStreamChunk);
+      socket.off("ai_stream_end", handleStreamEnd);
     };
-  }, [activeRoom]);
+  }, [activeRoom, addStreamStart, appendStreamChunk, finalizeStream]);
 
   useEffect(() => {
     async function fetchMessages() {
@@ -395,11 +441,11 @@ function ChatPage() {
         el.scrollTop = el.scrollHeight;
       });
     }
-  }, [messages, isThinking]);
+  }, [messages, isThinking, streamingMessages]);
 
 
   const handleSendMessage = async (e, messageOverride = null) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const rawMessage = typeof messageOverride === 'string' ? messageOverride : newMessage;
     if (rawMessage.trim() === '') return;
 
@@ -423,8 +469,8 @@ function ChatPage() {
     }
     setMessageError('');
 
-    // If message starts with @ai, show thinking indicator
-    if (textToSend.startsWith('@ai')) {
+    // If message mentions a persona or @ai, show thinking indicator
+    if (textToSend.startsWith('@ai') || textToSend.match(/@\w+/)) {
       setIsThinking(true);
     }
 
@@ -501,12 +547,7 @@ function ChatPage() {
   };
 
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage(e);
-    }
-  };
+
 
    const handleJoinRoom = () => {
      const roomId = roomInput.trim();
@@ -592,13 +633,17 @@ function ChatPage() {
             Leave Room
           </button>
         </div>
-        <StatusBadge mode={mode} />
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <StatusBadge mode={mode} />
+          {activeRoom && <WorkspaceToggleButton />}
+        </div>
       </div>
 
         <div className="chat-main-area">
           <div className="chat-container">
-            <div className="chat-content">
-              <div className="message-list" ref={messageListRef}>
+            <div className="chat-layout">
+              <div className="chat-content">
+                <div className="message-list" ref={messageListRef}>
                 {loadingMessages ? (
                   <div className="empty-state">Loading messages...</div>
                 ) : messageError ? (
@@ -620,6 +665,13 @@ function ChatPage() {
                     <p>No messages yet. Start the conversation or join a room.</p>
                   </div>
                 )}
+                {Object.values(streamingMessages).map(streamMsg => (
+                  <MessageBubble
+                    key={`stream-${streamMsg.id}`}
+                    message={streamMsg}
+                    isOwnMessage={false}
+                  />
+                ))}
                 {isThinking && (
                   <div className="ai-thinking">
                     <span>ThinkRoom AI is processing</span>
@@ -631,22 +683,20 @@ function ChatPage() {
                   </div>
                 )}
               </div>
-              <form className="chat-input-form" onSubmit={handleSendMessage}>
-                <input
-                  type="text"
-                  className="chat-input-field"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Type a message..."
-                />
-                <button type="submit" className="chat-send-button" disabled={!newMessage.trim()}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                </button>
-              </form>
+              <ChatInput
+                value={newMessage}
+                onChange={setNewMessage}
+                onSend={() => handleSendMessage(null)}
+                placeholder="Message ThinkRoom AI..."
+              />
             </div>
           </div>
         </div>
+      </div>
+
+      {/* AI Task Workspace — adaptive overlay, appears only when tasks are detected.
+          Uses socketInstance (set on socket 'connect' event) for reliability. */}
+      <AITaskWorkspace socket={socketInstance} roomId={activeRoom} />
     </div>
   );
 }
