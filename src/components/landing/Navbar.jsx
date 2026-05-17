@@ -4,7 +4,7 @@ const Navbar = ({ onEnterChat, onEnterResources }) => {
   return (
     <nav className="lp-navbar">
       <div className="lp-brand">
-        DISASTER CONNECT
+        THINKROOM AI
       </div>
       <div className="lp-nav-links">
         <a className="lp-nav-link" href="#problem">PROBLEM</a>

@@ -1,4 +1,4 @@
-// Disaster Connect - Integrated with ThinkRoom AI
+// ThinkRoom AI
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
@@ -598,7 +598,7 @@ function ChatPage() {
     <div className="chat-page-container">
       <AnimatedBackground />
        <header className="chat-header">
-         <h1>Disaster Connect {activeRoom ? `- Room: ${activeRoom}` : '- Global Chat'}</h1>
+         <h1>ThinkRoom AI {activeRoom ? `- Room: ${activeRoom}` : '- Global Chat'}</h1>
          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
            <NetworkStatus queuedCount={queuedCount} />
            <UserButton afterSignOutUrl="/" />

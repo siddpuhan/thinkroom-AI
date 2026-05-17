@@ -4,7 +4,7 @@ const Footer = () => {
   return (
     <footer className="lp-footer">
       <div className="lp-footer-brand">
-        <div className="lp-footer-title">Disaster Connect</div>
+        <div className="lp-footer-title">ThinkRoom AI</div>
         <div className="lp-footer-tag">Resilience through connection</div>
       </div>
       
@@ -16,7 +16,7 @@ const Footer = () => {
       </div>
       
       <div className="lp-footer-copy">
-        © 2026 DISASTER CONNECT.<br/>ALL RIGHTS RESERVED.
+        © 2026 THINKROOM AI.<br/>ALL RIGHTS RESERVED.
       </div>
     </footer>
   );

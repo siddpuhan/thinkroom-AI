@@ -48,7 +48,7 @@ app.get("/api/ping", (req, res) => {
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "Disaster Connect backend is running",
+    message: "ThinkRoom AI backend is running",
   });
 });
 
@@ -392,7 +392,7 @@ const startServer = async () => {
   });
 
   httpServer.listen(PORT, () => {
-    console.log(`\n🚀 Disaster Connect Server running on port ${PORT}`);
+    console.log(`\n🚀 ThinkRoom AI Server running on port ${PORT}`);
     console.log(`📡 Socket.IO ready`);
     console.log(`🧠 Task extraction pipeline active`);
     console.log(`👻 Shadow AI decision pipeline active`);

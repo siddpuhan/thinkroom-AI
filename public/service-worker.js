@@ -1,5 +1,5 @@
 // Service Worker - Network First strategy for dev safety
-const CACHE_NAME = 'disaster-connect-cache-v2';
+const CACHE_NAME = 'thinkroom-ai-cache-v2';
 
 // Only cache the final built assets (not raw source files)
 const STATIC_ASSETS = [
