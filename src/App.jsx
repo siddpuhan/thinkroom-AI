@@ -13,7 +13,7 @@ import ResourceBoard from './ResourceBoard';
 import NetworkStatus from './components/NetworkStatus';
 import ThemeContext, { ThemeProvider } from './context/ThemeContext';
 import { useChatStore } from './store/chatStore';
-import ChatInput from './components/ChatInput';
+import ChatInput from './components/chat/ChatInput';
 import { AITaskWorkspace } from './components/tasks/AITaskWorkspace.jsx';
 import { WorkspaceToggleButton } from './components/tasks/WorkspaceToggleButton.jsx';
 
@@ -130,10 +130,15 @@ const StatusBadge = ({ mode }) => {
 };
 
 function ChatPage() {
+  console.count("[RENDER] ChatPage");
   const { user } = useUser();
   const { getToken } = useAuth();
   const { theme, toggleTheme } = useContext(ThemeContext);
-  const { streamingMessages, addStreamStart, appendStreamChunk, finalizeStream } = useChatStore();
+  
+  const streamingMessages = useChatStore(state => state.streamingMessages);
+  const addStreamStart = useChatStore(state => state.addStreamStart);
+  const appendStreamChunk = useChatStore(state => state.appendStreamChunk);
+  const finalizeStream = useChatStore(state => state.finalizeStream);
   
   const currentUserIdRef = useRef(null);
   const currentUserId = user?.id;
@@ -175,7 +180,7 @@ function ChatPage() {
    }, [user]);
 
      const [messages, setMessages] = useState([]);
-     const [newMessage, setNewMessage] = useState('');
+
      const [loadingMessages, setLoadingMessages] = useState(false);
      const [messageError, setMessageError] = useState('');
      const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -444,12 +449,10 @@ function ChatPage() {
   }, [messages, isThinking, streamingMessages]);
 
 
-  const handleSendMessage = async (e, messageOverride = null) => {
-    if (e) e.preventDefault();
-    const rawMessage = typeof messageOverride === 'string' ? messageOverride : newMessage;
-    if (rawMessage.trim() === '') return;
+  const handleSendMessage = async (messageText) => {
+    if (!messageText || messageText.trim() === '') return;
 
-    const textToSend = rawMessage.trim();
+    const textToSend = messageText.trim();
     const clientId = generateUUID();
     const tempMessage = {
       id: clientId,
@@ -463,10 +466,12 @@ function ChatPage() {
       room_id: activeRoomRef.current
     };
 
+    
+
+
+
     setMessages((prevMessages) => [...prevMessages, tempMessage]);
-    if (messageOverride === null) {
-      setNewMessage('');
-    }
+    
     setMessageError('');
 
     // If message mentions a persona or @ai, show thinking indicator
@@ -591,7 +596,7 @@ function ChatPage() {
     
     const recapMessage = "@ai Give me a 3-sentence summary of what has been discussed in this room so far.";
     
-    handleSendMessage({ preventDefault: () => {} }, recapMessage);
+    handleSendMessage(recapMessage);
   };
 
   return (
@@ -684,9 +689,10 @@ function ChatPage() {
                 )}
               </div>
               <ChatInput
-                value={newMessage}
-                onChange={setNewMessage}
-                onSend={() => handleSendMessage(null)}
+                onSendMessage={handleSendMessage}
+                socket={socketInstance}
+                roomId={activeRoom}
+                userName={currentUserNameRef.current}
                 placeholder="Message ThinkRoom AI..."
               />
             </div>

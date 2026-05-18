@@ -14,8 +14,66 @@ import './AITaskWorkspace.css';
 // AITaskCard — Individual task with status actions
 // ─────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────
+// AIConfirmDeleteModal — Modal to confirm permanent hard delete
+// ─────────────────────────────────────────────────────────────────────────
+
+const AIConfirmDeleteModal = memo(({ item, onClose, onConfirm }) => {
+  if (!item) return null;
+
+  const listItems = {
+    task: ['Task record details', 'Related task activity history', 'Assignment links'],
+    document: ['AI document contents', 'Source chat message references', 'Metadata'],
+    decision: ['Decision details', 'Decision timeline record']
+  };
+
+  const warnings = listItems[item.type] || ['Item data', 'All related associations'];
+
+  return (
+    <div className="ai-modal-overlay" onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        className="ai-modal-card"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="ai-modal-title">⚠️ Delete {item.type === 'task' ? 'Task' : item.type === 'document' ? 'Document' : 'Decision'}?</h3>
+        <p className="ai-modal-description">
+          Are you sure you want to permanently delete <strong>"{item.title}"</strong>?
+        </p>
+        <div className="ai-modal-warning-list">
+          <p style={{ margin: '0 0 6px 0', fontSize: '0.8rem', fontWeight: 600, color: '#fca5a5' }}>
+            This action will permanently remove:
+          </p>
+          {warnings.map((w, idx) => (
+            <span key={idx} className="ai-modal-warning-item">{w}</span>
+          ))}
+        </div>
+        <div className="ai-modal-actions">
+          <button className="ai-modal-btn cancel" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="ai-modal-btn confirm-delete" onClick={onConfirm}>
+            Delete Permanently
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+});
+AIConfirmDeleteModal.displayName = 'AIConfirmDeleteModal';
+
+// ─────────────────────────────────────────────────────────────────────────
+// AITaskCard — Individual task with status actions and delete menu
+// ─────────────────────────────────────────────────────────────────────────
+
 const AITaskCard = memo(({ task, socket, roomId }) => {
   const optimisticUpdateStatus = useTaskStore(state => state.optimisticUpdateStatus);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(task.title);
+  const [editDescription, setEditDescription] = useState(task.description || '');
 
   const formatDeadline = (deadline) => {
     if (!deadline) return null;
@@ -44,10 +102,68 @@ const AITaskCard = memo(({ task, socket, roomId }) => {
     });
   };
 
+  const handleSaveEdit = (e) => {
+    e.stopPropagation();
+    if (!socket || !roomId || !editTitle.trim()) return;
+    socket.emit('update_task', {
+      taskId: task.id,
+      title: editTitle.trim(),
+      description: editDescription.trim(),
+      roomId
+    });
+    setIsEditing(false);
+  };
+
+  const handleArchive = (e) => {
+    e.stopPropagation();
+    if (!socket || !roomId) return;
+    socket.emit('toggle_archive_task', {
+      taskId: task.id,
+      isArchived: !task.is_archived,
+      roomId,
+      actorId: 'user'
+    });
+    setShowDropdown(false);
+  };
+
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    if (!socket || !roomId) return;
+    socket.emit('soft_delete_task', {
+      taskId: task.id,
+      roomId,
+      actorId: 'user'
+    });
+    setShowDropdown(false);
+  };
+
   const assignedName = task.assignedToName || task.assigned_to_name || task.assigned_to || null;
   const priorityClass = task.priority || 'medium';
   const isCompleted = task.status === 'completed';
   const deadlineLabel = formatDeadline(task.deadline);
+
+  if (isEditing) {
+    return (
+      <div className="ai-edit-form" onClick={(e) => e.stopPropagation()}>
+        <input
+          className="ai-edit-input"
+          value={editTitle}
+          onChange={(e) => setEditTitle(e.target.value)}
+          placeholder="Task Title"
+        />
+        <textarea
+          className="ai-edit-textarea"
+          value={editDescription}
+          onChange={(e) => setEditDescription(e.target.value)}
+          placeholder="Task Description"
+        />
+        <div className="ai-edit-actions">
+          <button className="ai-edit-btn cancel" onClick={() => setIsEditing(false)}>Cancel</button>
+          <button className="ai-edit-btn save" onClick={handleSaveEdit}>Save</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -57,7 +173,30 @@ const AITaskCard = memo(({ task, socket, roomId }) => {
       exit={{ opacity: 0, x: 20, scale: 0.96 }}
       transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
       className={`ai-task-card priority-${priorityClass} ${isCompleted ? 'completed' : ''}`}
+      onMouseLeave={() => setShowDropdown(false)}
     >
+      <button
+        className="ai-card-options-trigger"
+        onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}
+        title="Actions"
+      >
+        ⋮
+      </button>
+
+      {showDropdown && (
+        <div className="ai-card-dropdown" onClick={(e) => e.stopPropagation()}>
+          <button className="ai-dropdown-item" onClick={(e) => { setIsEditing(true); setShowDropdown(false); }}>
+            ✏️ Edit
+          </button>
+          <button className="ai-dropdown-item" onClick={handleArchive}>
+            📦 {task.is_archived ? 'Unarchive' : 'Archive'}
+          </button>
+          <button className="ai-dropdown-item delete" onClick={handleDelete}>
+            🗑️ Delete
+          </button>
+        </div>
+      )}
+
       <div className="ai-task-card-top">
         <p className="ai-task-card-title">{task.title}</p>
         {task.ai_generated && <span className="ai-task-ai-badge">AI ✨</span>}
@@ -107,7 +246,7 @@ const AITaskSection = memo(({ status, socket, roomId }) => {
 
   const tasks = useMemo(() =>
     Object.values(tasksObj)
-      .filter(t => t.status === status)
+      .filter(t => t.status === status && !t.is_deleted && !t.is_archived)
       .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)),
     [tasksObj, status]
   );
@@ -136,10 +275,11 @@ AITaskSection.displayName = 'AITaskSection';
 // AIDocumentCard & AIDocumentSection
 // ─────────────────────────────────────────────────────────────────────────
 
-const AIDocumentCard = memo(({ doc }) => {
+const AIDocumentCard = memo(({ doc, socket, roomId }) => {
   const [expandedSummary, setExpandedSummary] = useState(false);
   const [expandedParticipants, setExpandedParticipants] = useState(false);
   const [expandedSource, setExpandedSource] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   const participants = Array.isArray(doc.participants) ? doc.participants : [];
   const sourceMessages = Array.isArray(doc.source_messages) ? doc.source_messages : [];
@@ -173,6 +313,27 @@ const AIDocumentCard = memo(({ doc }) => {
   
   const formattedTime = new Date(doc.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
+  const handleArchive = (e) => {
+    e.stopPropagation();
+    if (!socket || !roomId) return;
+    socket.emit('toggle_archive_document', {
+      docId: doc.id,
+      isArchived: !doc.is_archived,
+      roomId
+    });
+    setShowDropdown(false);
+  };
+
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    if (!socket || !roomId) return;
+    socket.emit('soft_delete_document', {
+      docId: doc.id,
+      roomId
+    });
+    setShowDropdown(false);
+  };
+
   return (
     <motion.div
       layout
@@ -180,7 +341,30 @@ const AIDocumentCard = memo(({ doc }) => {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       className="ai-doc-card"
+      onMouseLeave={() => setShowDropdown(false)}
     >
+      <button
+        className="ai-card-options-trigger"
+        onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}
+        title="Actions"
+      >
+        ⋮
+      </button>
+
+      {showDropdown && (
+        <div className="ai-card-dropdown" onClick={(e) => e.stopPropagation()}>
+          <button className="ai-dropdown-item" onClick={() => { setExpandedSummary(true); setShowDropdown(false); }}>
+            📖 Open
+          </button>
+          <button className="ai-dropdown-item" onClick={handleArchive}>
+            📦 {doc.is_archived ? 'Unarchive' : 'Archive'}
+          </button>
+          <button className="ai-dropdown-item delete" onClick={handleDelete}>
+            🗑️ Delete
+          </button>
+        </div>
+      )}
+
       <div className="ai-doc-header">
         <span className="ai-doc-icon">{icons[doc.type] || '📄'}</span>
         <span className="ai-doc-header-text">{typeLabels[doc.type] || doc.type} Decision</span>
@@ -301,7 +485,7 @@ const AIDocumentCard = memo(({ doc }) => {
 });
 AIDocumentCard.displayName = 'AIDocumentCard';
 
-const AIDocumentSection = memo(({ type }) => {
+const AIDocumentSection = memo(({ type, socket, roomId }) => {
   const getDocumentsByType = useTaskStore(state => state.getDocumentsByType);
   const docs = getDocumentsByType(type === 'docs' ? 'all' : type);
 
@@ -318,7 +502,7 @@ const AIDocumentSection = memo(({ type }) => {
     <div style={{ marginTop: '8px' }}>
       <AnimatePresence>
         {docs.map(doc => (
-          <AIDocumentCard key={doc.id} doc={doc} />
+          <AIDocumentCard key={doc.id} doc={doc} socket={socket} roomId={roomId} />
         ))}
       </AnimatePresence>
     </div>
@@ -330,10 +514,31 @@ AIDocumentSection.displayName = 'AIDocumentSection';
 // Decisions Tab Components
 // ─────────────────────────────────────────────────────────────────────────
 
-const AIDecisionCard = memo(({ decision }) => {
+const AIDecisionCard = memo(({ decision, socket, roomId }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
   const participants = Array.isArray(decision.participants) ? decision.participants : [];
-  
   const formattedTime = new Date(decision.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+  const handleArchive = (e) => {
+    e.stopPropagation();
+    if (!socket || !roomId) return;
+    socket.emit('toggle_archive_decision', {
+      decisionId: decision.decision_id,
+      isArchived: !decision.is_archived,
+      roomId
+    });
+    setShowDropdown(false);
+  };
+
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    if (!socket || !roomId) return;
+    socket.emit('soft_delete_decision', {
+      decisionId: decision.decision_id,
+      roomId
+    });
+    setShowDropdown(false);
+  };
 
   return (
     <motion.div
@@ -342,7 +547,30 @@ const AIDecisionCard = memo(({ decision }) => {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       className="ai-decision-card"
+      onMouseLeave={() => setShowDropdown(false)}
     >
+      <button
+        className="ai-card-options-trigger"
+        onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}
+        title="Actions"
+      >
+        ⋮
+      </button>
+
+      {showDropdown && (
+        <div className="ai-card-dropdown" onClick={(e) => e.stopPropagation()}>
+          <button className="ai-dropdown-item" onClick={() => setShowDropdown(false)}>
+            📖 Open
+          </button>
+          <button className="ai-dropdown-item" onClick={handleArchive}>
+            📦 {decision.is_archived ? 'Unarchive' : 'Archive'}
+          </button>
+          <button className="ai-dropdown-item delete" onClick={handleDelete}>
+            🗑️ Delete
+          </button>
+        </div>
+      )}
+
       <div className="ai-decision-header">
         <span className="ai-decision-icon">⚡</span>
         <h4 className="ai-decision-title">{decision.title}</h4>
@@ -370,7 +598,7 @@ const AIDecisionCard = memo(({ decision }) => {
 });
 AIDecisionCard.displayName = 'AIDecisionCard';
 
-const AIDecisionSection = memo(() => {
+const AIDecisionSection = memo(({ socket, roomId }) => {
   const getAllDecisions = useTaskStore(state => state.getAllDecisions);
   const decisions = getAllDecisions();
 
@@ -387,7 +615,7 @@ const AIDecisionSection = memo(() => {
     <div className="ai-decision-timeline">
       <AnimatePresence>
         {decisions.map(dec => (
-          <AIDecisionCard key={dec.decision_id} decision={dec} />
+          <AIDecisionCard key={dec.decision_id} decision={dec} socket={socket} roomId={roomId} />
         ))}
       </AnimatePresence>
     </div>
@@ -396,12 +624,144 @@ const AIDecisionSection = memo(() => {
 AIDecisionSection.displayName = 'AIDecisionSection';
 
 // ─────────────────────────────────────────────────────────────────────────
+// Trash Section Component
+// ─────────────────────────────────────────────────────────────────────────
+
+const AITrashSection = memo(({ socket, roomId, setConfirmDelete }) => {
+  const getTrashTasks = useTaskStore(state => state.getTrashTasks);
+  const getTrashDocuments = useTaskStore(state => state.getTrashDocuments);
+  const getTrashDecisions = useTaskStore(state => state.getTrashDecisions);
+
+  const trashTasks = getTrashTasks();
+  const trashDocs = getTrashDocuments();
+  const trashDecs = getTrashDecisions();
+
+  const hasItems = trashTasks.length > 0 || trashDocs.length > 0 || trashDecs.length > 0;
+
+  const handleRestore = (id, type) => {
+    if (!socket || !roomId) return;
+    console.log(`[TRASH] Restoring ${type} id=${id}`);
+    if (type === 'task') {
+      socket.emit('restore_task', { taskId: id, roomId, actorId: 'user' });
+    } else if (type === 'document') {
+      socket.emit('restore_document', { docId: id, roomId });
+    } else if (type === 'decision') {
+      socket.emit('restore_decision', { decisionId: id, roomId });
+    }
+  };
+
+  if (!hasItems) {
+    return (
+      <div className="ai-trash-empty">
+        <div className="ai-trash-empty-icon">🗑️</div>
+        <p>Trash is empty.</p>
+        <p style={{ fontSize: '0.72rem', color: 'rgba(148, 163, 184, 0.4)' }}>
+          Deleted tasks, documents, and decisions will appear here for recovery.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ai-trash-list">
+      {trashTasks.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <div className="ai-trash-header">🗑️ Tasks ({trashTasks.length})</div>
+          <AnimatePresence>
+            {trashTasks.map(t => (
+              <motion.div
+                key={t.id}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="ai-trash-card"
+              >
+                <span className="ai-trash-card-type">Task</span>
+                <h4 className="ai-trash-card-title">{t.title}</h4>
+                <div className="ai-trash-actions">
+                  <button className="ai-trash-btn restore" onClick={() => handleRestore(t.id, 'task')}>
+                    Restore
+                  </button>
+                  <button className="ai-trash-btn delete-perm" onClick={() => setConfirmDelete({ id: t.id, type: 'task', title: t.title })}>
+                    Delete Permanently
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {trashDocs.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <div className="ai-trash-header">🗑️ Documents ({trashDocs.length})</div>
+          <AnimatePresence>
+            {trashDocs.map(d => (
+              <motion.div
+                key={d.id}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="ai-trash-card"
+              >
+                <span className="ai-trash-card-type">{d.type || 'Doc'}</span>
+                <h4 className="ai-trash-card-title">{d.title}</h4>
+                <div className="ai-trash-actions">
+                  <button className="ai-trash-btn restore" onClick={() => handleRestore(d.id, 'document')}>
+                    Restore
+                  </button>
+                  <button className="ai-trash-btn delete-perm" onClick={() => setConfirmDelete({ id: d.id, type: 'document', title: d.title })}>
+                    Delete Permanently
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {trashDecs.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <div className="ai-trash-header">🗑️ Decisions ({trashDecs.length})</div>
+          <AnimatePresence>
+            {trashDecs.map(d => (
+              <motion.div
+                key={d.decision_id}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="ai-trash-card"
+              >
+                <span className="ai-trash-card-type">Decision</span>
+                <h4 className="ai-trash-card-title">{d.title}</h4>
+                <div className="ai-trash-actions">
+                  <button className="ai-trash-btn restore" onClick={() => handleRestore(d.decision_id, 'decision')}>
+                    Restore
+                  </button>
+                  <button className="ai-trash-btn delete-perm" onClick={() => setConfirmDelete({ id: d.decision_id, type: 'decision', title: d.title })}>
+                    Delete Permanently
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  );
+});
+AITrashSection.displayName = 'AITrashSection';
+
+// ─────────────────────────────────────────────────────────────────────────
 // AITaskPanel — The slide-in workspace panel with Tabs
 // ─────────────────────────────────────────────────────────────────────────
 
 const AUTO_COLLAPSE_MS = 60_000; // Increased to 60s for reading docs
 
-const AITaskPanel = memo(({ socket, roomId }) => {
+const AITaskPanel = memo(({ socket, roomId, setConfirmDelete }) => {
   const closePanel = useTaskStore(state => state.closePanel);
   const tasksObj = useTaskStore(state => state.tasks);
   const docsObj = useTaskStore(state => state.documents);
@@ -409,19 +769,21 @@ const AITaskPanel = memo(({ socket, roomId }) => {
 
   const [activeTab, setActiveTab] = useState('tasks');
 
-  const totalTasks = Object.keys(tasksObj).length;
-  const pendingCount = Object.values(tasksObj).filter(t => t.status === 'pending').length;
-  const completedCount = Object.values(tasksObj).filter(t => t.status === 'completed').length;
-  const totalDocs = Object.keys(docsObj).length;
+  // Filter out deleted/archived elements from standard statistics counts
+  const totalTasks = Object.values(tasksObj).filter(t => !t.is_deleted && !t.is_archived).length;
+  const pendingCount = Object.values(tasksObj).filter(t => t.status === 'pending' && !t.is_deleted && !t.is_archived).length;
+  const completedCount = Object.values(tasksObj).filter(t => t.status === 'completed' && !t.is_deleted && !t.is_archived).length;
+  const totalDocs = Object.values(docsObj).filter(d => !d.is_deleted && !d.is_archived).length;
 
-  // Auto-collapse on inactivity
+  // Auto-collapse on inactivity (Pause auto-collapse if on Trash or editing to avoid frustrating users)
   const resetInactivityTimer = useCallback(() => {
     clearTimeout(inactivityTimer.current);
+    if (activeTab === 'trash') return; // Disable auto-collapse on trash
     inactivityTimer.current = setTimeout(() => {
       console.log('[AI PANEL] Auto-collapsing after inactivity');
       closePanel();
     }, AUTO_COLLAPSE_MS);
-  }, [closePanel]);
+  }, [closePanel, activeTab]);
 
   useEffect(() => {
     resetInactivityTimer();
@@ -468,9 +830,12 @@ const AITaskPanel = memo(({ socket, roomId }) => {
         <button className={`ai-tab-btn ${activeTab === 'summary' ? 'active' : ''}`} onClick={() => setActiveTab('summary')}>
           Summaries
         </button>
+        <button className={`ai-tab-btn ${activeTab === 'trash' ? 'active' : ''}`} onClick={() => setActiveTab('trash')} style={{ color: '#f87171' }}>
+          🗑️ Trash
+        </button>
       </div>
 
-      {/* Stats bar (Only show for tasks) */}
+      {/* Stats bar (Only show for active tabs) */}
       {activeTab === 'tasks' ? (
         <div className="ai-panel-stats">
           <div className="ai-stat-item">
@@ -486,6 +851,13 @@ const AITaskPanel = memo(({ socket, roomId }) => {
             <span className="ai-stat-label">Done</span>
           </div>
         </div>
+      ) : activeTab === 'trash' ? (
+        <div className="ai-panel-stats" style={{ background: 'rgba(239, 68, 68, 0.05)', borderColor: 'rgba(239, 68, 68, 0.15)' }}>
+          <div className="ai-stat-item" style={{ flex: 'none', width: '100%', background: 'transparent', border: 'none' }}>
+            <span className="ai-stat-value" style={{ color: '#ef4444' }}>🗑️ Recovery Workspace</span>
+            <span className="ai-stat-label" style={{ color: '#fca5a5' }}>Restore items or delete them permanently</span>
+          </div>
+        </div>
       ) : (
         <div className="ai-panel-stats">
           <div className="ai-stat-item" style={{ flex: 'none', width: '100%' }}>
@@ -495,15 +867,17 @@ const AITaskPanel = memo(({ socket, roomId }) => {
         </div>
       )}
 
-      {/* Auto-collapse timer visual */}
+      {/* Auto-collapse timer visual (Hidden when on Trash) */}
       <div className="ai-panel-timer-bar">
-        <motion.div
-          className="ai-panel-timer-bar-fill"
-          initial={{ scaleX: 1 }}
-          animate={{ scaleX: 0 }}
-          transition={{ duration: AUTO_COLLAPSE_MS / 1000, ease: 'linear' }}
-          key={Date.now()} // Resets on re-render
-        />
+        {activeTab !== 'trash' && (
+          <motion.div
+            className="ai-panel-timer-bar-fill"
+            initial={{ scaleX: 1 }}
+            animate={{ scaleX: 0 }}
+            transition={{ duration: AUTO_COLLAPSE_MS / 1000, ease: 'linear' }}
+            key={activeTab} // Resets on tab change
+          />
+        )}
       </div>
 
       {/* Content */}
@@ -522,9 +896,11 @@ const AITaskPanel = memo(({ socket, roomId }) => {
             </>
           )
         ) : activeTab === 'decision' ? (
-          <AIDecisionSection />
+          <AIDecisionSection socket={socket} roomId={roomId} />
+        ) : activeTab === 'trash' ? (
+          <AITrashSection socket={socket} roomId={roomId} setConfirmDelete={setConfirmDelete} />
         ) : (
-          <AIDocumentSection type={activeTab} />
+          <AIDocumentSection type={activeTab} socket={socket} roomId={roomId} />
         )}
       </div>
     </motion.div>
@@ -596,10 +972,13 @@ AINotificationChip.displayName = 'AINotificationChip';
 export const AITaskWorkspace = memo(({ socket, roomId }) => {
   const upsertTask = useTaskStore(state => state.upsertTask);
   const setTasks   = useTaskStore(state => state.setTasks);
+  const removeTask = useTaskStore(state => state.removeTask);
   const upsertDocument = useTaskStore(state => state.upsertDocument);
   const setDocuments = useTaskStore(state => state.setDocuments);
+  const removeDocument = useTaskStore(state => state.removeDocument);
   const upsertDecision = useTaskStore(state => state.upsertDecision);
   const setDecisions = useTaskStore(state => state.setDecisions);
+  const removeDecision = useTaskStore(state => state.removeDecision);
   const openPanel  = useTaskStore(state => state.openPanel);
   const closePanel = useTaskStore(state => state.closePanel);
   const dismissNotification = useTaskStore(state => state.dismissNotification);
@@ -610,6 +989,25 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
   const latestDocument   = useTaskStore(state => state.latestDocument);
   const notificationType = useTaskStore(state => state.notificationType);
   const newTaskCount     = useTaskStore(state => state.newTaskCount);
+
+  // Global Confirm Delete state
+  const [confirmDelete, setConfirmDelete] = useState(null); // { id, type, title }
+
+  // Handle permanent hard deletion of items confirmed by user
+  const handleConfirmPermanentDelete = useCallback(() => {
+    if (!confirmDelete || !socket || !roomId) return;
+    const { id, type } = confirmDelete;
+
+    console.log(`[WORKSPACE] Global Confirm Delete: Permanently removing ${type} id=${id}`);
+    if (type === 'task') {
+      socket.emit('hard_delete_task', { taskId: id, roomId });
+    } else if (type === 'document') {
+      socket.emit('hard_delete_document', { docId: id, roomId });
+    } else if (type === 'decision') {
+      socket.emit('hard_delete_decision', { decisionId: id, roomId });
+    }
+    setConfirmDelete(null);
+  }, [confirmDelete, socket, roomId]);
 
   // ── Socket bindings ──────────────────────────────────────
   useEffect(() => {
@@ -630,29 +1028,60 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
 
     const handleTaskCreated = (task) => upsertTask(task);
     const handleTaskUpdated = (task) => upsertTask(task);
+    const handleTaskDeleted = ({ taskId }) => {
+      console.log('[SOCKET] task_deleted received:', taskId);
+      removeTask(taskId);
+    };
+
     const handleDocumentCreated = (doc) => upsertDocument(doc);
     const handleDocumentUpdated = (doc) => upsertDocument(doc);
+    const handleDocumentDeleted = ({ docId }) => {
+      console.log('[SOCKET] document_deleted received:', docId);
+      removeDocument(docId);
+    };
+
     const handleDecisionCreated = (dec) => upsertDecision(dec);
+    const handleDecisionUpdated = (dec) => {
+      console.log('[SOCKET] decision_updated received:', dec.decision_id);
+      upsertDecision(dec);
+    };
+    const handleDecisionDeleted = ({ decisionId }) => {
+      console.log('[SOCKET] decision_deleted received:', decisionId);
+      removeDecision(decisionId);
+    };
 
     socket.on('task_created', handleTaskCreated);
     socket.on('task_updated', handleTaskUpdated);
+    socket.on('task_deleted', handleTaskDeleted);
+
     socket.on('document_created', handleDocumentCreated);
     socket.on('document_updated', handleDocumentUpdated);
+    socket.on('document_deleted', handleDocumentDeleted);
+
     socket.on('decision_created', handleDecisionCreated);
+    socket.on('decision_updated', handleDecisionUpdated);
+    socket.on('decision_deleted', handleDecisionDeleted);
 
     return () => {
       socket.off('task_created', handleTaskCreated);
       socket.off('task_updated', handleTaskUpdated);
+      socket.off('task_deleted', handleTaskDeleted);
+
       socket.off('document_created', handleDocumentCreated);
       socket.off('document_updated', handleDocumentUpdated);
+      socket.off('document_deleted', handleDocumentDeleted);
+
       socket.off('decision_created', handleDecisionCreated);
+      socket.off('decision_updated', handleDecisionUpdated);
+      socket.off('decision_deleted', handleDecisionDeleted);
     };
-  }, [socket, roomId, upsertTask, setTasks, upsertDocument, setDocuments, upsertDecision, setDecisions]);
+  }, [socket, roomId, upsertTask, setTasks, removeTask, upsertDocument, setDocuments, removeDocument, upsertDecision, setDecisions, removeDecision]);
 
   // ── Reset state on room change ───────────────────────────
   useEffect(() => {
     closePanel();
     dismissNotification();
+    setConfirmDelete(null);
   }, [roomId, closePanel, dismissNotification]);
 
   if (!roomId) return null;
@@ -684,12 +1113,24 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
               transition={{ type: 'spring', stiffness: 380, damping: 38, mass: 0.8 }}
               style={{ width: '100%', height: '100%' }}
             >
-              <AITaskPanel socket={socket} roomId={roomId} />
+              <AITaskPanel socket={socket} roomId={roomId} setConfirmDelete={setConfirmDelete} />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {confirmDelete && (
+          <AIConfirmDeleteModal
+            key="confirm-modal"
+            item={confirmDelete}
+            onClose={() => setConfirmDelete(null)}
+            onConfirm={handleConfirmPermanentDelete}
+          />
+        )}
+      </AnimatePresence>
     </>
   );
 });
 AITaskWorkspace.displayName = 'AITaskWorkspace';
+

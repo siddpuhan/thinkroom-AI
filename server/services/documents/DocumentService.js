@@ -64,4 +64,71 @@ export class DocumentService {
     );
     return result.rows.length > 0;
   }
+
+  /**
+   * Soft delete a document.
+   */
+  static async softDelete(docId) {
+    console.log(`[DOC SERVICE] 🗑️ Soft deleting doc ${docId}`);
+    const result = await pool.query(`
+      UPDATE documents SET is_deleted = true, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 RETURNING *
+    `, [docId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Document ${docId} not found`);
+    }
+
+    return result.rows[0];
+  }
+
+  /**
+   * Restore a soft-deleted document.
+   */
+  static async restore(docId) {
+    console.log(`[DOC SERVICE] ♻️ Restoring doc ${docId}`);
+    const result = await pool.query(`
+      UPDATE documents SET is_deleted = false, deleted_at = null, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 RETURNING *
+    `, [docId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Document ${docId} not found`);
+    }
+
+    return result.rows[0];
+  }
+
+  /**
+   * Hard delete a document permanently from the database.
+   */
+  static async hardDelete(docId) {
+    console.log(`[DOC SERVICE] 🔥 Hard deleting doc ${docId}`);
+    const result = await pool.query(`
+      DELETE FROM documents WHERE id = $1 RETURNING *
+    `, [docId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Document ${docId} not found`);
+    }
+
+    return result.rows[0];
+  }
+
+  /**
+   * Toggle archived status of a document.
+   */
+  static async toggleArchive(docId, isArchived) {
+    console.log(`[DOC SERVICE] 📦 Toggling archive doc ${docId} → ${isArchived}`);
+    const result = await pool.query(`
+      UPDATE documents SET is_archived = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2 RETURNING *
+    `, [isArchived, docId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Document ${docId} not found`);
+    }
+
+    return result.rows[0];
+  }
 }

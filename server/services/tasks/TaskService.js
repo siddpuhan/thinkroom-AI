@@ -158,4 +158,152 @@ export class TaskService {
   static async complete(taskId, actorId) {
     return this.updateStatus(taskId, 'completed', actorId);
   }
+
+  /**
+   * Update a task's title and description.
+   */
+  static async update(taskId, { title, description }) {
+    const pool = getDB();
+    console.log(`[TASK SERVICE] 📝 Updating task ${taskId}: title="${title}"`);
+    try {
+      const result = await pool.query(`
+        UPDATE tasks SET title = $1, description = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3 RETURNING *
+      `, [title, description, taskId]);
+
+      if (result.rows.length === 0) {
+        throw new Error(`Task ${taskId} not found`);
+      }
+
+      return result.rows[0];
+    } catch (err) {
+      console.error(`[TASK SERVICE] ❌ Failed to update task details:`, err.message);
+      throw err;
+    }
+  }
+
+
+  /**
+   * Soft delete a task.
+   */
+  static async softDelete(taskId, actorId) {
+    const pool = getDB();
+    console.log(`[TASK SERVICE] 🗑️ Soft deleting task ${taskId}`);
+    try {
+      const result = await pool.query(`
+        UPDATE tasks SET is_deleted = true, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 RETURNING *
+      `, [taskId]);
+
+      if (result.rows.length === 0) {
+        throw new Error(`Task ${taskId} not found`);
+      }
+
+      const updatedTask = result.rows[0];
+      try {
+        await pool.query(`
+          INSERT INTO task_activity (task_id, activity_type, actor_id)
+          VALUES ($1, $2, $3)
+        `, [taskId, 'soft_deleted', actorId || 'SYSTEM']);
+      } catch (actErr) {
+        console.warn(`[TASK SERVICE] ⚠️ Activity log insert failed (non-fatal):`, actErr.message);
+      }
+
+      return updatedTask;
+    } catch (err) {
+      console.error(`[TASK SERVICE] ❌ Failed to soft delete task:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Restore a soft-deleted task.
+   */
+  static async restore(taskId, actorId) {
+    const pool = getDB();
+    console.log(`[TASK SERVICE] ♻️ Restoring task ${taskId}`);
+    try {
+      const result = await pool.query(`
+        UPDATE tasks SET is_deleted = false, deleted_at = null, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 RETURNING *
+      `, [taskId]);
+
+      if (result.rows.length === 0) {
+        throw new Error(`Task ${taskId} not found`);
+      }
+
+      const updatedTask = result.rows[0];
+      try {
+        await pool.query(`
+          INSERT INTO task_activity (task_id, activity_type, actor_id)
+          VALUES ($1, $2, $3)
+        `, [taskId, 'restored', actorId || 'SYSTEM']);
+      } catch (actErr) {
+        console.warn(`[TASK SERVICE] ⚠️ Activity log insert failed (non-fatal):`, actErr.message);
+      }
+
+      return updatedTask;
+    } catch (err) {
+      console.error(`[TASK SERVICE] ❌ Failed to restore task:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Hard delete a task permanently from the database.
+   * Cascade delete will automatically clean up task_activity and task_assignments.
+   */
+  static async hardDelete(taskId) {
+    const pool = getDB();
+    console.log(`[TASK SERVICE] 🔥 Hard deleting task ${taskId}`);
+    try {
+      // First delete task assignments and activity if foreign keys are not cascading (they are, but let's be safe and rely on cascade, or run delete on task)
+      const result = await pool.query(`
+        DELETE FROM tasks WHERE id = $1 RETURNING *
+      `, [taskId]);
+
+      if (result.rows.length === 0) {
+        throw new Error(`Task ${taskId} not found`);
+      }
+
+      console.log(`[TASK SERVICE] ✅ Task ${taskId} permanently deleted`);
+      return result.rows[0];
+    } catch (err) {
+      console.error(`[TASK SERVICE] ❌ Failed to hard delete task:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Toggle archived status of a task.
+   */
+  static async toggleArchive(taskId, isArchived, actorId) {
+    const pool = getDB();
+    console.log(`[TASK SERVICE] 📦 Toggling archive task ${taskId} → ${isArchived}`);
+    try {
+      const result = await pool.query(`
+        UPDATE tasks SET is_archived = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2 RETURNING *
+      `, [isArchived, taskId]);
+
+      if (result.rows.length === 0) {
+        throw new Error(`Task ${taskId} not found`);
+      }
+
+      const updatedTask = result.rows[0];
+      try {
+        await pool.query(`
+          INSERT INTO task_activity (task_id, activity_type, actor_id, metadata)
+          VALUES ($1, $2, $3, $4)
+        `, [taskId, isArchived ? 'archived' : 'unarchived', actorId || 'SYSTEM', JSON.stringify({ isArchived })]);
+      } catch (actErr) {
+        console.warn(`[TASK SERVICE] ⚠️ Activity log insert failed (non-fatal):`, actErr.message);
+      }
+
+      return updatedTask;
+    } catch (err) {
+      console.error(`[TASK SERVICE] ❌ Failed to toggle archive:`, err.message);
+      throw err;
+    }
+  }
 }

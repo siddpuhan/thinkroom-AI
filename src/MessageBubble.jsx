@@ -103,4 +103,4 @@ const MessageBubble = ({ message, isOwnMessage }) => {
   );
 };
 
-export default MessageBubble;
+export default React.memo(MessageBubble);

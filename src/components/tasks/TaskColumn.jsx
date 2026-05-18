@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { TaskCard } from './TaskCard.jsx';
 import { useTaskStore } from '../../store/taskStore.js';
 
-export const TaskColumn = ({ title, status }) => {
+export const TaskColumn = React.memo(({ title, status }) => {
   const tasksObj = useTaskStore(state => state.tasks);
   
   const tasks = useMemo(() => {
@@ -42,4 +42,4 @@ export const TaskColumn = ({ title, status }) => {
       </div>
     </div>
   );
-};
+});

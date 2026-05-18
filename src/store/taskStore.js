@@ -119,6 +119,14 @@ export const useTaskStore = create((set, get) => ({
     }));
   },
 
+  removeDecision: (decisionId) => {
+    set((state) => {
+      const newDecs = { ...state.decisions };
+      delete newDecs[decisionId];
+      return { decisions: newDecs };
+    });
+  },
+
   /** Optimistic status update — applied immediately, server confirms async */
   optimisticUpdateStatus: (taskId, newStatus) => {
     console.log(`[TASK STORE] optimisticUpdateStatus: ${taskId} → ${newStatus}`);
@@ -165,27 +173,49 @@ export const useTaskStore = create((set, get) => ({
   getTasksByStatus: (status) => {
     const tasks = Object.values(get().tasks);
     return tasks
-      .filter(t => t.status === status)
+      .filter(t => t.status === status && !t.is_deleted && !t.is_archived)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
-  getTotalCount: () => Object.keys(get().tasks).length,
-  getPendingCount: () => Object.values(get().tasks).filter(t => t.status === 'pending').length,
+  getTotalCount: () => Object.values(get().tasks).filter(t => !t.is_deleted && !t.is_archived).length,
+  getPendingCount: () => Object.values(get().tasks).filter(t => t.status === 'pending' && !t.is_deleted && !t.is_archived).length,
 
   getDocumentsByType: (type) => {
     const docs = Object.values(get().documents);
+    const activeDocs = docs.filter(d => !d.is_deleted && !d.is_archived);
     if (!type || type === 'all') {
-      return docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      return activeDocs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
-    return docs
+    return activeDocs
       .filter(d => d.type === type)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
   getAllDecisions: () => {
     return Object.values(get().decisions)
+      .filter(d => !d.is_deleted && !d.is_archived)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
-  getTotalDocCount: () => Object.keys(get().documents).length,
+  getTotalDocCount: () => Object.values(get().documents).filter(d => !d.is_deleted && !d.is_archived).length,
+
+  // ─── Trash Selectors ──────────────────────────────────────
+
+  getTrashTasks: () => {
+    return Object.values(get().tasks)
+      .filter(t => t.is_deleted)
+      .sort((a, b) => new Date(b.deleted_at || b.updated_at || 0) - new Date(a.deleted_at || a.updated_at || 0));
+  },
+
+  getTrashDocuments: () => {
+    return Object.values(get().documents)
+      .filter(d => d.is_deleted)
+      .sort((a, b) => new Date(b.deleted_at || b.updated_at || 0) - new Date(a.deleted_at || a.updated_at || 0));
+  },
+
+  getTrashDecisions: () => {
+    return Object.values(get().decisions)
+      .filter(d => d.is_deleted)
+      .sort((a, b) => new Date(b.deleted_at || b.created_at || 0) - new Date(a.deleted_at || a.created_at || 0));
+  },
 }));

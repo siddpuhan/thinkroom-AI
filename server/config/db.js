@@ -113,6 +113,51 @@ const connectDB = async () => {
       console.warn("Tasks migration warning (non-fatal):", migErr.message);
     }
 
+    // Migration: Add soft-delete and archive columns to tasks, documents, and decisions
+    try {
+      await client.query(`
+        DO $$
+        BEGIN
+          -- Add is_deleted, deleted_at, is_archived to tasks
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tasks' AND column_name='is_deleted') THEN
+            ALTER TABLE tasks ADD COLUMN is_deleted BOOLEAN DEFAULT false;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tasks' AND column_name='deleted_at') THEN
+            ALTER TABLE tasks ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tasks' AND column_name='is_archived') THEN
+            ALTER TABLE tasks ADD COLUMN is_archived BOOLEAN DEFAULT false;
+          END IF;
+
+          -- Add is_deleted, deleted_at, is_archived to documents
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='documents' AND column_name='is_deleted') THEN
+            ALTER TABLE documents ADD COLUMN is_deleted BOOLEAN DEFAULT false;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='documents' AND column_name='deleted_at') THEN
+            ALTER TABLE documents ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='documents' AND column_name='is_archived') THEN
+            ALTER TABLE documents ADD COLUMN is_archived BOOLEAN DEFAULT false;
+          END IF;
+
+          -- Add is_deleted, deleted_at, is_archived to decisions
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='decisions' AND column_name='is_deleted') THEN
+            ALTER TABLE decisions ADD COLUMN is_deleted BOOLEAN DEFAULT false;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='decisions' AND column_name='deleted_at') THEN
+            ALTER TABLE decisions ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='decisions' AND column_name='is_archived') THEN
+            ALTER TABLE decisions ADD COLUMN is_archived BOOLEAN DEFAULT false;
+          END IF;
+        END $$;
+      `);
+      console.log("Soft-delete and archive columns migration completed");
+    } catch (migErr) {
+      console.warn("Soft-delete migration warning (non-fatal):", migErr.message);
+    }
+
+
     // Create task activity table
     await client.query(`
       CREATE TABLE IF NOT EXISTS task_activity (

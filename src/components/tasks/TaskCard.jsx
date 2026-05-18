@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-export const TaskCard = ({ task }) => {
+export const TaskCard = React.memo(({ task }) => {
   const priorityClass = {
     low: 'priority-low',
     medium: 'priority-medium',
@@ -36,4 +36,4 @@ export const TaskCard = ({ task }) => {
       </div>
     </div>
   );
-};
+});

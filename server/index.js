@@ -324,6 +324,79 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Update task details (title and description)
+  socket.on("update_task", async ({ taskId, title, description, roomId }) => {
+    console.log(`[SOCKET] 📝 update_task: task=${taskId}`);
+    try {
+      const updatedTask = await TaskService.update(taskId, { title, description });
+      io.to(roomId).emit("task_updated", {
+        ...updatedTask,
+        assignedToName: updatedTask.assigned_to_name || null,
+      });
+      console.log(`[SOCKET] ✅ task_updated (details) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ update_task error:`, err.message);
+    }
+  });
+
+
+  // Soft delete task (move to Trash)
+  socket.on("soft_delete_task", async ({ taskId, roomId, actorId }) => {
+    console.log(`[SOCKET] 🗑️ soft_delete_task: task=${taskId} in room=${roomId}`);
+    try {
+      const updatedTask = await TaskService.softDelete(taskId, actorId);
+      io.to(roomId).emit("task_updated", {
+        ...updatedTask,
+        assignedToName: updatedTask.assigned_to_name || null,
+      });
+      console.log(`[SOCKET] ✅ task_updated (soft deleted) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ soft_delete_task error:`, err.message);
+    }
+  });
+
+  // Restore task from Trash
+  socket.on("restore_task", async ({ taskId, roomId, actorId }) => {
+    console.log(`[SOCKET] ♻️ restore_task: task=${taskId} in room=${roomId}`);
+    try {
+      const updatedTask = await TaskService.restore(taskId, actorId);
+      io.to(roomId).emit("task_updated", {
+        ...updatedTask,
+        assignedToName: updatedTask.assigned_to_name || null,
+      });
+      console.log(`[SOCKET] ✅ task_updated (restored) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ restore_task error:`, err.message);
+    }
+  });
+
+  // Hard delete task permanently
+  socket.on("hard_delete_task", async ({ taskId, roomId }) => {
+    console.log(`[SOCKET] 🔥 hard_delete_task: task=${taskId} in room=${roomId}`);
+    try {
+      await TaskService.hardDelete(taskId);
+      io.to(roomId).emit("task_deleted", { taskId });
+      console.log(`[SOCKET] ✅ task_deleted emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ hard_delete_task error:`, err.message);
+    }
+  });
+
+  // Toggle task archive
+  socket.on("toggle_archive_task", async ({ taskId, isArchived, roomId, actorId }) => {
+    console.log(`[SOCKET] 📦 toggle_archive_task: task=${taskId} → archived=${isArchived}`);
+    try {
+      const updatedTask = await TaskService.toggleArchive(taskId, isArchived, actorId);
+      io.to(roomId).emit("task_updated", {
+        ...updatedTask,
+        assignedToName: updatedTask.assigned_to_name || null,
+      });
+      console.log(`[SOCKET] ✅ task_updated (archive toggled) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ toggle_archive_task error:`, err.message);
+    }
+  });
+
   // ─── Document Socket Events ─────────────────────────────
 
   socket.on("get_documents", async ({ roomId }, callback) => {
@@ -338,6 +411,56 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Soft delete document
+  socket.on("soft_delete_document", async ({ docId, roomId }) => {
+    console.log(`[SOCKET] 🗑️ soft_delete_document: doc=${docId} in room=${roomId}`);
+    try {
+      const updatedDoc = await DocumentService.softDelete(docId);
+      io.to(roomId).emit("document_updated", updatedDoc);
+      console.log(`[SOCKET] ✅ document_updated (soft deleted) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ soft_delete_document error:`, err.message);
+    }
+  });
+
+  // Restore document from Trash
+  socket.on("restore_document", async ({ docId, roomId }) => {
+    console.log(`[SOCKET] ♻️ restore_document: doc=${docId} in room=${roomId}`);
+    try {
+      const updatedDoc = await DocumentService.restore(docId);
+      io.to(roomId).emit("document_updated", updatedDoc);
+      console.log(`[SOCKET] ✅ document_updated (restored) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ restore_document error:`, err.message);
+    }
+  });
+
+  // Hard delete document permanently
+  socket.on("hard_delete_document", async ({ docId, roomId }) => {
+    console.log(`[SOCKET] 🔥 hard_delete_document: doc=${docId} in room=${roomId}`);
+    try {
+      await DocumentService.hardDelete(docId);
+      io.to(roomId).emit("document_deleted", { docId });
+      console.log(`[SOCKET] ✅ document_deleted emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ hard_delete_document error:`, err.message);
+    }
+  });
+
+  // Toggle document archive
+  socket.on("toggle_archive_document", async ({ docId, isArchived, roomId }) => {
+    console.log(`[SOCKET] 📦 toggle_archive_document: doc=${docId} → archived=${isArchived}`);
+    try {
+      const updatedDoc = await DocumentService.toggleArchive(docId, isArchived);
+      io.to(roomId).emit("document_updated", updatedDoc);
+      console.log(`[SOCKET] ✅ document_updated (archive toggled) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ toggle_archive_document error:`, err.message);
+    }
+  });
+
+  // ─── Decision Socket Events ─────────────────────────────
+
   socket.on("get_decisions", async ({ roomId }, callback) => {
     console.log(`[SOCKET] ⚡ get_decisions requested for room: ${roomId}`);
     try {
@@ -349,6 +472,55 @@ io.on("connection", (socket) => {
       if (typeof callback === 'function') callback([]);
     }
   });
+
+  // Soft delete decision
+  socket.on("soft_delete_decision", async ({ decisionId, roomId }) => {
+    console.log(`[SOCKET] 🗑️ soft_delete_decision: decision=${decisionId} in room=${roomId}`);
+    try {
+      const updatedDec = await DecisionService.softDelete(decisionId);
+      io.to(roomId).emit("decision_updated", updatedDec);
+      console.log(`[SOCKET] ✅ decision_updated (soft deleted) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ soft_delete_decision error:`, err.message);
+    }
+  });
+
+  // Restore decision from Trash
+  socket.on("restore_decision", async ({ decisionId, roomId }) => {
+    console.log(`[SOCKET] ♻️ restore_decision: decision=${decisionId} in room=${roomId}`);
+    try {
+      const updatedDec = await DecisionService.restore(decisionId);
+      io.to(roomId).emit("decision_updated", updatedDec);
+      console.log(`[SOCKET] ✅ decision_updated (restored) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ restore_decision error:`, err.message);
+    }
+  });
+
+  // Hard delete decision permanently
+  socket.on("hard_delete_decision", async ({ decisionId, roomId }) => {
+    console.log(`[SOCKET] 🔥 hard_delete_decision: decision=${decisionId} in room=${roomId}`);
+    try {
+      await DecisionService.hardDelete(decisionId);
+      io.to(roomId).emit("decision_deleted", { decisionId });
+      console.log(`[SOCKET] ✅ decision_deleted emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ hard_delete_decision error:`, err.message);
+    }
+  });
+
+  // Toggle decision archive
+  socket.on("toggle_archive_decision", async ({ decisionId, isArchived, roomId }) => {
+    console.log(`[SOCKET] 📦 toggle_archive_decision: decision=${decisionId} → archived=${isArchived}`);
+    try {
+      const updatedDec = await DecisionService.toggleArchive(decisionId, isArchived);
+      io.to(roomId).emit("decision_updated", updatedDec);
+      console.log(`[SOCKET] ✅ decision_updated (archive toggled) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ toggle_archive_decision error:`, err.message);
+    }
+  });
+
 
   // ─── Delivery Acknowledgements ─────────────────────────────
   socket.on("message-delivered", ({ clientId, senderSocketId }) => {

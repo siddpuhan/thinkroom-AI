@@ -49,4 +49,71 @@ export class DecisionService {
     );
     return result.rows.length > 0;
   }
+
+  /**
+   * Soft delete a decision.
+   */
+  static async softDelete(decisionId) {
+    console.log(`[DECISION DB SERVICE] 🗑️ Soft deleting decision ${decisionId}`);
+    const result = await pool.query(`
+      UPDATE decisions SET is_deleted = true, deleted_at = CURRENT_TIMESTAMP
+      WHERE decision_id = $1 RETURNING *
+    `, [decisionId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Decision ${decisionId} not found`);
+    }
+
+    return result.rows[0];
+  }
+
+  /**
+   * Restore a soft-deleted decision.
+   */
+  static async restore(decisionId) {
+    console.log(`[DECISION DB SERVICE] ♻️ Restoring decision ${decisionId}`);
+    const result = await pool.query(`
+      UPDATE decisions SET is_deleted = false, deleted_at = null
+      WHERE decision_id = $1 RETURNING *
+    `, [decisionId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Decision ${decisionId} not found`);
+    }
+
+    return result.rows[0];
+  }
+
+  /**
+   * Hard delete a decision permanently from the database.
+   */
+  static async hardDelete(decisionId) {
+    console.log(`[DECISION DB SERVICE] 🔥 Hard deleting decision ${decisionId}`);
+    const result = await pool.query(`
+      DELETE FROM decisions WHERE decision_id = $1 RETURNING *
+    `, [decisionId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Decision ${decisionId} not found`);
+    }
+
+    return result.rows[0];
+  }
+
+  /**
+   * Toggle archived status of a decision.
+   */
+  static async toggleArchive(decisionId, isArchived) {
+    console.log(`[DECISION DB SERVICE] 📦 Toggling archive decision ${decisionId} → ${isArchived}`);
+    const result = await pool.query(`
+      UPDATE decisions SET is_archived = $1
+      WHERE decision_id = $2 RETURNING *
+    `, [isArchived, decisionId]);
+
+    if (result.rows.length === 0) {
+      throw new Error(`Decision ${decisionId} not found`);
+    }
+
+    return result.rows[0];
+  }
 }
