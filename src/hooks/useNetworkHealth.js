@@ -30,7 +30,7 @@ export default function useNetworkHealth() {
         else setStatus("poor");
 
         setMode("Live Mode");
-      } catch (err) {
+      } catch (_unusedVariable) {
         setStatus("offline");
         setMode("Offline Mode");
       }

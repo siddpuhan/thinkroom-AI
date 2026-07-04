@@ -12,7 +12,7 @@ const MarkdownRenderer = memo(({ content }) => {
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
         components={{
-          a: ({ node, ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />
+          a: ({ ...props }) => <a target="_blank" rel="noopener noreferrer" {...props} />
         }}
       >
         {content}

@@ -1,5 +1,5 @@
 // ThinkRoom AI
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext, lazy, Suspense } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { SignedIn, SignedOut, RedirectToSignIn, useAuth, useUser, UserButton } from '@clerk/clerk-react';
@@ -14,8 +14,13 @@ import NetworkStatus from './components/NetworkStatus';
 import ThemeContext, { ThemeProvider } from './context/ThemeContext';
 import { useChatStore } from './store/chatStore';
 import ChatInput from './components/chat/ChatInput';
-import { AITaskWorkspace } from './components/tasks/AITaskWorkspace.jsx';
 import { WorkspaceToggleButton } from './components/tasks/WorkspaceToggleButton.jsx';
+
+const AITaskWorkspace = lazy(() =>
+  import('./components/tasks/AITaskWorkspace.jsx').then((module) => ({
+    default: module.AITaskWorkspace,
+  }))
+);
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin.replace(/:\d+$/, ':5000');
 
@@ -177,7 +182,7 @@ function ChatPage() {
       };
        syncUserToDB();
      }
-   }, [user]);
+  }, [user, getToken]);
 
      const [messages, setMessages] = useState([]);
 
@@ -188,9 +193,10 @@ function ChatPage() {
      const [queuedCount, setQueuedCount] = useState(0);
      const [roomInput, setRoomInput] = useState('');
      const [activeRoom, setActiveRoom] = useState('');
-     const [rooms, setRooms] = useState([]);
      const [isThinking, setIsThinking] = useState(false);
      const [socketInstance, setSocketInstance] = useState(null); // live socket for child components
+     const [showMemoryDebug, setShowMemoryDebug] = useState(false);
+     const [memoryDebugInfo, setMemoryDebugInfo] = useState(null);
     const messageListRef = useRef(null);
     const socketRef = useRef(null);
     const isSyncingOfflineRef = useRef(false);
@@ -206,14 +212,35 @@ function ChatPage() {
     console.log('navigator.onLine (initial):', navigator.onLine);
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = async (e) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        setShowMemoryDebug(prev => !prev);
+        if (!showMemoryDebug && activeRoomRef.current) {
+          try {
+            const baseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin.replace(/:\d+$/, ':5000');
+            const res = await fetch(`${baseUrl}/api/memory/${activeRoomRef.current}`);
+            const data = await res.json();
+            if (data.success) {
+              setMemoryDebugInfo(data);
+            }
+          } catch (err) {
+            console.error("Failed to fetch memory debug info", err);
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showMemoryDebug, activeRoom]);
+
    useEffect(() => {
      const savedRoom = localStorage.getItem("roomId");
      if (savedRoom) {
        setRoomInput(savedRoom);
        setActiveRoom(savedRoom);
        activeRoomRef.current = savedRoom;
-       // Initialize rooms with the saved room
-       setRooms([savedRoom]);
      }
    }, []);
 
@@ -375,7 +402,7 @@ function ChatPage() {
       }
     }
     fetchMessages();
-  }, [activeRoom]);
+  }, [activeRoom, getToken]);
 
 
   useEffect(() => {
@@ -433,7 +460,7 @@ function ChatPage() {
     };
 
     syncOfflineMessages();
-  }, [isOnline]);
+  }, [isOnline, getToken]);
 
 
   useEffect(() => {
@@ -483,9 +510,9 @@ function ChatPage() {
       try {
         const token = await getToken();
         const savedMessage = await sendMessageApi(
-          textToSend, 
-          currentUserIdRef.current || user?.id, 
-          token, 
+          textToSend,
+          currentUserIdRef.current || user?.id,
+          token,
           currentUserNameRef.current,
           activeRoomRef.current,
           clientId
@@ -539,17 +566,6 @@ function ChatPage() {
   };
 
 
-  const simulateIncomingMessage = async () => {
-    try {
-      const savedMessage = await sendMessageApi('This is a simulated incoming message.', 'Other');
-      socketRef.current?.emit('send_message', savedMessage);
-      const allMessages = await fetchMessagesApi();
-      setMessages(allMessages);
-    } catch (error) {
-      console.error('Error simulating incoming message:', error);
-      setMessageError('Failed to simulate incoming message');
-    }
-  };
 
 
 
@@ -570,14 +586,6 @@ function ChatPage() {
      setActiveRoom(roomId);
      localStorage.setItem("roomId", roomId);
      socketRef.current.emit('join-room', roomId);
-     
-     // Add room to rooms list if not already present
-     setRooms(prevRooms => {
-       if (!prevRooms.includes(roomId)) {
-         return [...prevRooms, roomId];
-       }
-       return prevRooms;
-     });
    };
 
   const handleLeaveRoom = () => {
@@ -592,11 +600,13 @@ function ChatPage() {
   };
 
   const handleRecap = () => {
-    if (!activeRoom) return;
+    if (!activeRoom || !socketRef.current) return;
     
-    const recapMessage = "@ai Give me a 3-sentence summary of what has been discussed in this room so far.";
-    
-    handleSendMessage(recapMessage);
+    socketRef.current.emit('request_summary', { 
+      roomId: activeRoom, 
+      summaryType: 'catch_up',
+      requestorName: currentUserNameRef.current
+    });
   };
 
   return (
@@ -702,7 +712,34 @@ function ChatPage() {
 
       {/* AI Task Workspace — adaptive overlay, appears only when tasks are detected.
           Uses socketInstance (set on socket 'connect' event) for reliability. */}
-      <AITaskWorkspace socket={socketInstance} roomId={activeRoom} />
+      <Suspense fallback={<div className="ai-workspace-loading">Loading AI Workspace...</div>}>
+        <AITaskWorkspace socket={socketInstance} roomId={activeRoom} />
+      </Suspense>
+
+      {/* Developer Memory Debug UI */}
+      {showMemoryDebug && memoryDebugInfo && (
+        <div style={{
+          position: 'fixed', bottom: 20, left: 20, width: '400px', maxHeight: '60vh',
+          backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px',
+          padding: '16px', color: '#f8fafc', zIndex: 9999, overflowY: 'auto',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: '1rem', color: '#38bdf8' }}>🧠 Room Memory Debug</h3>
+            <button onClick={() => setShowMemoryDebug(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>✖</button>
+          </div>
+          <div style={{ marginBottom: '12px', fontSize: '0.85rem', color: '#94a3b8' }}>
+            <strong>Tokens (Chars):</strong> {memoryDebugInfo.tokenCount} <br/>
+            <strong>Last Updated:</strong> {new Date(memoryDebugInfo.updatedAt).toLocaleTimeString()}
+          </div>
+          <pre style={{ 
+            fontSize: '0.75rem', whiteSpace: 'pre-wrap', background: '#0f172a', 
+            padding: '12px', borderRadius: '4px', overflowX: 'hidden'
+          }}>
+            {memoryDebugInfo.contextString}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

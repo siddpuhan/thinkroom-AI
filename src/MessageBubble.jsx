@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import MarkdownRenderer from './components/MarkdownRenderer';
+import React, { useState, lazy, Suspense } from 'react';
 import { Copy, RefreshCw, Check, Zap } from 'lucide-react';
+
+const MarkdownRenderer = lazy(() => import('./components/MarkdownRenderer'));
 
 const AI_PERSONAS = [
   "Senior Architect",
@@ -74,7 +75,9 @@ const MessageBubble = ({ message, isOwnMessage }) => {
         <div className="message-text">
           {isAI ? (
             <>
-              <MarkdownRenderer content={message.text} />
+              <Suspense fallback={<span className="markdown-loading">Loading...</span>}>
+                <MarkdownRenderer content={message.text} />
+              </Suspense>
               {message.isStreaming && <span className="streaming-cursor"></span>}
             </>
           ) : (

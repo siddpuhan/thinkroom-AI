@@ -1,6 +1,6 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
-dotenv.config({ path: new URL('../../.env', import.meta.url) });
+dotenv.config({ path: new URL('../.env', import.meta.url) });
 
 const { Pool } = pg;
 
@@ -84,6 +84,14 @@ const connectDB = async () => {
       await client.query(`
         DO $$
         BEGIN
+          -- Add status if an older tasks table exists without it
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name='tasks' AND column_name='status'
+          ) THEN
+            ALTER TABLE tasks ADD COLUMN status TEXT DEFAULT 'pending';
+          END IF;
+
           -- Add assigned_to_name if missing
           IF NOT EXISTS (
             SELECT 1 FROM information_schema.columns
@@ -209,11 +217,81 @@ const connectDB = async () => {
         title TEXT NOT NULL,
         decision TEXT NOT NULL,
         reason TEXT,
+        alternatives_discussed JSONB DEFAULT '[]',
         participants JSONB DEFAULT '[]',
+        source_messages JSONB DEFAULT '[]',
+        discussion_summary TEXT,
+        confidence FLOAT DEFAULT 0,
+        status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'confirmed', 'rejected', 'archived')),
+        created_by TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_decisions_room_id ON decisions(room_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);`);
+
+    // Decision lifecycle migration: add fields required for staged candidate handling.
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS alternatives_discussed JSONB DEFAULT '[]';`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS source_messages JSONB DEFAULT '[]';`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS discussion_summary TEXT;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS confidence FLOAT DEFAULT 0;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS created_by TEXT;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMP WITH TIME ZONE;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP WITH TIME ZONE;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT false;`);
+    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS updated_by TEXT;`);
+
+    // Create AI notes table (independent from tasks and decisions)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        room_id TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('Reminder', 'Idea', 'Risk', 'Observation', 'Resource')),
+        title TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        confidence FLOAT NOT NULL DEFAULT 0.7,
+        created_by TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP WITH TIME ZONE,
+        archived_at TIMESTAMP WITH TIME ZONE
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_room_id ON notes(room_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_type ON notes(type);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC);`);
+    await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS content TEXT NOT NULL DEFAULT '';`);
+    await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS confidence FLOAT NOT NULL DEFAULT 0.7;`);
+    await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS created_by TEXT;`);
+    await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`);
+    await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;`);
+    await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE;`);
+
+    // Create AI summaries table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS summaries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        room_id TEXT NOT NULL,
+        summary_type TEXT NOT NULL CHECK(summary_type IN ('meeting', 'catch_up', 'daily')),
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        highlights JSONB DEFAULT '[]',
+        participants JSONB DEFAULT '[]',
+        created_by TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP WITH TIME ZONE,
+        is_archived BOOLEAN DEFAULT false
+      );
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_summaries_room_id ON summaries(room_id);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_summaries_type ON summaries(summary_type);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_summaries_created_at ON summaries(created_at DESC);`);
 
     console.log("PostgreSQL connected successfully");
     client.release();

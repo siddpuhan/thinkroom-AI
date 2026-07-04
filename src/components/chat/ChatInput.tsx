@@ -1,23 +1,48 @@
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { SendHorizontal, Paperclip } from 'lucide-react';
+import { useChatStore } from '../../store/chatStore.js';
+import { useUser } from '@clerk/clerk-react';
 import '../ChatInput.css';
 
+interface ChatInputProps {
+  onSendMessage: (_text: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}
+
 // Simple debounce helper
-function debounce(func, wait) {
-  let timeout;
-  const debounced = function(...args) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func.apply(this, args), wait);
+function debounce(func: () => void, wait: number) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  
+  const debounced = function() {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+    }
+    timeout = setTimeout(() => {
+      func();
+    }, wait);
   };
-  debounced.cancel = () => clearTimeout(timeout);
+  
+  debounced.cancel = () => {
+    if (timeout !== null) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+  };
+  
   return debounced;
 }
 
-const ChatInput = ({ onSendMessage, socket, roomId, userName, disabled, placeholder }) => {
-  console.count("[RENDER] ChatInput");
+const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = false, placeholder }) => {
   const [text, setText] = useState('');
-  const textareaRef = useRef(null);
-  const debouncedTypingRef = useRef(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const debouncedTypingRef = useRef<ReturnType<typeof debounce> | null>(null);
+
+  // Subscribe to store updates with specific selectors (only re-renders if socket or roomId changes)
+  const socket = useChatStore(state => state.socket);
+  const roomId = useChatStore(state => state.roomId);
+  const { user } = useUser();
+  const userName = user?.fullName || user?.username || 'Anonymous';
 
   // Auto-resize textarea logic
   useEffect(() => {
@@ -37,13 +62,13 @@ const ChatInput = ({ onSendMessage, socket, roomId, userName, disabled, placehol
     }, 500);
 
     return () => {
-      if (debouncedTypingRef.current && debouncedTypingRef.current.cancel) {
+      if (debouncedTypingRef.current) {
         debouncedTypingRef.current.cancel();
       }
     };
   }, [socket, roomId, userName]);
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setText(val);
 
@@ -60,7 +85,7 @@ const ChatInput = ({ onSendMessage, socket, roomId, userName, disabled, placehol
     }
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();

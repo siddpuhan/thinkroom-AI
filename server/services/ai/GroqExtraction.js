@@ -3,17 +3,12 @@
 // IMPORTANT: assigned_to stores a display NAME string (not a user FK id).
 // This avoids PostgreSQL foreign key violations entirely.
 
-import Groq from "groq-sdk";
+import { groq, withRetry } from "../../utils/groqClient.js";
 import dotenv from "dotenv";
 import { getDB } from "../../config/db.js";
+import { logger } from "../../utils/logger.js";
 
 dotenv.config();
-
-if (!process.env.GROQ_API_KEY) {
-  console.error("[GROQ EXTRACTION] ❌ GROQ_API_KEY is not set! Task extraction will fail.");
-}
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // Minimum confidence for a task to be accepted
 const CONFIDENCE_THRESHOLD = 0.6;
@@ -87,9 +82,9 @@ Message: "How are you doing today?"
 → {"tasks": []}`;
 
     try {
-      console.log(`[GROQ EXTRACTION] 📡 Calling Groq API (model: llama-3.3-70b-versatile)...`);
+      logger.info("GROQ-EXTRACTION", `📡 Calling Groq API (model: llama-3.3-70b-versatile)...`);
       
-      const completion = await groq.chat.completions.create({
+      const completion = await withRetry(() => groq.chat.completions.create({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Extract tasks from this message: "${messageText}"` }
@@ -98,7 +93,7 @@ Message: "How are you doing today?"
         temperature: 0.1,
         max_tokens: 1024,
         response_format: { type: "json_object" }
-      });
+      }));
 
       const rawJson = completion.choices[0]?.message?.content;
       console.log(`[GROQ EXTRACTION] 📨 Raw Groq response: ${rawJson}`);

@@ -1,10 +1,10 @@
-import Groq from "groq-sdk";
+import { groq, withRetry } from "../utils/groqClient.js";
 import { getDB } from "../config/db.js";
+import { logger } from "../utils/logger.js";
 import dotenv from "dotenv";
+import { MemoryService } from "../services/memory/MemoryService.js";
 
 dotenv.config();
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export async function processPersonaStream(roomId, messageId, cleanPrompt, persona, io) {
   const pool = getDB();
@@ -18,11 +18,14 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
     
     const chatHistory = historyResult.rows.reverse().map(m => `${m.sender_name}: ${m.text}`).join('\n');
 
+    // 1b. Fetch Room Memory Engine Context
+    const memoryContext = await MemoryService.getContext(roomId);
+
     // 2. Build Prompt Context
     const messages = [
       { 
         role: "system", 
-        content: `${persona.role}\n\nRecent Conversation History:\n${chatHistory}` 
+        content: `${persona.role}\n\n${memoryContext}\n\nRecent Conversation History:\n${chatHistory}` 
       },
       { role: "user", content: cleanPrompt }
     ];
@@ -35,12 +38,12 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
       color: persona.color
     });
 
-    // 4. Initialize Stream
-    const stream = await groq.chat.completions.create({
+    // 4. Initialize Stream with retry mechanism
+    const stream = await withRetry(() => groq.chat.completions.create({
       messages,
       model: persona.model,
       stream: true,
-    });
+    }));
 
     let fullResponse = "";
 
@@ -68,6 +71,13 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
       created_at: insertResult.rows[0].created_at
     });
   } catch (error) {
-    console.error("AI Stream Error:", error);
+    logger.error("GROQ-SERVICE", `AI Stream Error: ${error.message}`, error);
+    io.to(roomId).emit("ai_stream_end", {
+      messageId,
+      finalDbId: `error-${messageId}`,
+      text: "⚠️ AI temporarily unavailable",
+      created_at: new Date().toISOString(),
+      status: 'failed'
+    });
   }
 }

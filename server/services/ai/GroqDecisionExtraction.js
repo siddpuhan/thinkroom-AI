@@ -1,15 +1,10 @@
 // GroqDecisionExtraction.js — Groq-powered decision/document extraction from conversation windows.
 // Only called AFTER DecisionPrefilter passes. Analyzes 10-20 messages as a conversation.
 
-import Groq from 'groq-sdk';
+import { groq, withRetry } from '../../utils/groqClient.js';
 import dotenv from 'dotenv';
+import { logger } from '../../utils/logger.js';
 dotenv.config();
-
-if (!process.env.GROQ_API_KEY) {
-  console.warn('[DECISION EXTRACTION] ⚠️ GROQ_API_KEY not set. Decision extraction disabled.');
-}
-
-const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 
 export class GroqDecisionExtraction {
   /**
@@ -17,9 +12,10 @@ export class GroqDecisionExtraction {
    * @param {Array<{text: string, sender_name: string}>} messageWindow - Recent messages
    * @param {string} roomId
    * @param {string[]} matchedPhrases - Phrases from the prefilter
+   * @param {object|null} currentCandidate - Existing pending candidate, if any
    * @returns {Promise<Array>} - Array of document objects
    */
-  static async analyzeConversation(messageWindow, roomId, matchedPhrases = []) {
+  static async analyzeConversation(messageWindow, roomId, matchedPhrases = [], currentCandidate = null) {
     if (!groq) {
       console.error('[DECISION EXTRACTION] ❌ No Groq client available.');
       return [];
@@ -35,40 +31,55 @@ export class GroqDecisionExtraction {
 
     const participants = [...new Set(messageWindow.map(m => m.sender_name).filter(Boolean))];
 
-    const systemPrompt = `You are an intelligent AI note-taker embedded in a team collaboration workspace.
+    const existingCandidateBlock = currentCandidate
+      ? `\nCURRENT PENDING CANDIDATE:\n${JSON.stringify({
+          title: currentCandidate.title,
+          decision: currentCandidate.decision,
+          reason: currentCandidate.reason,
+          participants: currentCandidate.participants,
+          alternativesDiscussed: currentCandidate.alternatives_discussed || currentCandidate.alternativesDiscussed || [],
+          confidence: currentCandidate.confidence,
+          status: currentCandidate.status,
+        })}`
+      : '';
 
-Your job is to analyze a conversation window and detect if any of the following occurred:
-1. A **decision** was finalized (team agreed on something)
-2. An **architecture decision** was made (technology, framework, pattern choice)
-3. A **meeting conclusion** was reached (summary of discussion outcomes)
-4. An **important agreement** was established
+    const systemPrompt = `You are a production-grade AI meeting assistant that manages decisions over time.
+
+Your job is to analyze a conversation window and detect whether a decision candidate exists, is evolving, or is final.
 
 CRITICAL RULES:
-- A decision requires MULTIPLE people discussing AND agreeing. One person stating a preference is NOT a decision.
-- Look for proposal → discussion → agreement → finalization patterns.
-- The confidence must reflect how certain the decision is. Speculation or "maybe" = low confidence.
-- Only return documents with confidence >= 0.7
-- Return EMPTY array if no clear decision/agreement was reached.
+- A decision candidate begins as PENDING. Never treat the first signal as a final decision.
+- Require at least 2 participants and one or more confirmation phrases for CONFIRMED status.
+- Confirmation phrases include: agreed, confirmed, approved, settled, locked, finalized, let's proceed, done, fine.
+- If contradictions still exist, do NOT finalize. Update the candidate instead.
+- If the conversation reverses a prior candidate (for example Tomorrow -> Today -> Tomorrow holiday -> Fine tomorrow), preserve the latest stable resolution.
+- Only return CONFIRMED when confidence is above 0.85 and the discussion is stable.
+- Return REJECTED when the conversation clearly invalidates the candidate.
 
 RESPOND WITH STRICT JSON ONLY:
 {
-  "documents": [
+  "decisions": [
     {
-      "decisionDetected": true,
-      "confidence": 0.92,
-      "type": "decision" | "architecture" | "meeting_notes" | "summary",
+      "status": "pending" | "confirmed" | "rejected",
       "title": "Short descriptive title",
-      "summary": "2-3 sentence summary of the discussion",
-      "decision": "What was ultimately decided or agreed upon in 1 sentence",
+      "decision": "What is currently being decided or has been decided",
       "reason": "The main justification or reasoning behind the decision",
-      "tags": ["#react", "#architecture"],
+      "alternativesDiscussed": ["Option A", "Option B"],
       "participants": ["Name1", "Name2"],
-      "sourceMessageIndices": [3, 5, 7, 8]
+      "confidence": 0.92,
+      "discussionSummary": "2-3 sentence summary of the discussion",
+      "sourceMessageIndices": [3, 5, 7, 8],
+      "confirmationPhrases": ["Agreed", "Confirmed"],
+      "contradictionDetected": false,
+      "contradictionReason": "",
+      "hasConsensus": true,
+      "finalizable": false,
+      "needsMoreDiscussion": true
     }
   ]
 }
 
-If no decision/agreement detected, return: {"documents": []}
+If no decision candidate exists, return: {"decisions": []}
 
 EXAMPLES:
 
@@ -78,26 +89,26 @@ Conversation:
 [3] Alice: "Agreed, let's go with PostgreSQL"
 [4] Bob: "Confirmed, PostgreSQL it is"
 
-→ {"documents": [{"decisionDetected": true, "confidence": 0.95, "type": "architecture", "title": "Database Selection: PostgreSQL", "summary": "The team discussed database options and evaluated PostgreSQL vs MongoDB.", "decision": "PostgreSQL selected as the primary database.", "reason": "Requires ACID transactions for data integrity.", "tags": ["#database", "#postgresql", "#architecture"], "participants": ["Alice", "Bob"], "sourceMessageIndices": [1, 2, 3, 4]}]}
+→ {"decisions": [{"status": "confirmed", "confidence": 0.95, "title": "Database Selection: PostgreSQL", "discussionSummary": "The team discussed database options and evaluated PostgreSQL vs MongoDB.", "decision": "PostgreSQL selected as the primary database.", "reason": "Requires ACID transactions for data integrity.", "alternativesDiscussed": ["MongoDB"], "participants": ["Alice", "Bob"], "sourceMessageIndices": [1, 2, 3, 4], "confirmationPhrases": ["Agreed", "Confirmed"], "contradictionDetected": false, "contradictionReason": "", "hasConsensus": true, "finalizable": true, "needsMoreDiscussion": false}]}
 
 Conversation:
 [1] Dave: "Maybe we should use Tailwind"
 
-→ {"documents": []}  (Single message, no discussion/agreement)`;
+→ {"decisions": []}  (Single message, no discussion/agreement)${existingCandidateBlock}`;
 
     try {
-      console.log(`[DECISION EXTRACTION] 📡 Calling Groq API...`);
+      logger.info("DECISION-EXTRACTION", `📡 Calling Groq API...`);
 
-      const completion = await groq.chat.completions.create({
+      const completion = await withRetry(() => groq.chat.completions.create({
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Analyze this conversation for decisions and important agreements:\n\n${conversationText}\n\nParticipants: ${participants.join(', ')}` }
+          { role: 'user', content: `Analyze this conversation for decisions and evolving decision candidates.\n\n${conversationText}\n\nParticipants: ${participants.join(', ')}` }
         ],
         model: 'llama-3.3-70b-versatile',
         temperature: 0.1,
         max_tokens: 1500,
         response_format: { type: 'json_object' }
-      });
+      }));
 
       const raw = completion.choices?.[0]?.message?.content;
       console.log(`[DECISION EXTRACTION] 📨 Raw response: ${raw?.substring(0, 300)}`);
@@ -105,17 +116,40 @@ Conversation:
       if (!raw) return [];
 
       const parsed = JSON.parse(raw);
-      const documents = parsed.documents || [];
+      const decisions = parsed.decisions || [];
 
-      // Filter by confidence threshold
-      const validDocs = documents.filter(d => d.confidence >= 0.7 && d.decisionDetected);
-      console.log(`[DECISION EXTRACTION] ✅ Extracted ${validDocs.length} valid document(s) from ${documents.length} detected`);
+      const normalized = decisions
+        .map((decision) => {
+          if (!decision || typeof decision !== 'object') return null;
+          const confidence = parseFloat(decision.confidence) || 0;
+          const participants = Array.isArray(decision.participants) ? decision.participants : [];
+          const sourceMessages = (decision.sourceMessageIndices || []).map(i => messageWindow[i - 1]).filter(Boolean);
 
-      // Attach source messages
-      return validDocs.map(doc => ({
-        ...doc,
-        participants: doc.participants || participants,
-        sourceMessages: (doc.sourceMessageIndices || []).map(i => messageWindow[i - 1]).filter(Boolean),
+          return {
+            status: ['pending', 'confirmed', 'rejected'].includes(decision.status) ? decision.status : 'pending',
+            title: typeof decision.title === 'string' ? decision.title.trim() : '',
+            decision: typeof decision.decision === 'string' ? decision.decision.trim() : '',
+            reason: typeof decision.reason === 'string' ? decision.reason.trim() : '',
+            alternativesDiscussed: Array.isArray(decision.alternativesDiscussed) ? decision.alternativesDiscussed : [],
+            participants,
+            confidence,
+            discussionSummary: typeof decision.discussionSummary === 'string' ? decision.discussionSummary.trim() : '',
+            sourceMessages,
+            confirmationPhrases: Array.isArray(decision.confirmationPhrases) ? decision.confirmationPhrases : [],
+            contradictionDetected: Boolean(decision.contradictionDetected),
+            contradictionReason: typeof decision.contradictionReason === 'string' ? decision.contradictionReason.trim() : '',
+            hasConsensus: Boolean(decision.hasConsensus),
+            finalizable: Boolean(decision.finalizable),
+            needsMoreDiscussion: Boolean(decision.needsMoreDiscussion),
+          };
+        })
+        .filter((decision) => decision && decision.title && decision.confidence >= 0.7);
+
+      console.log(`[DECISION EXTRACTION] ✅ Extracted ${normalized.length} decision candidate(s) from ${decisions.length} detected`);
+
+      return normalized.map((decision) => ({
+        ...decision,
+        participants: decision.participants.length > 0 ? decision.participants : participants,
       }));
 
     } catch (err) {

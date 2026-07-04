@@ -2,6 +2,11 @@ import { create } from 'zustand';
 
 export const useChatStore = create((set) => ({
   streamingMessages: {},
+  socket: null,
+  roomId: '',
+  
+  setSocket: (socket) => set({ socket }),
+  setRoomId: (roomId) => set({ roomId }),
   
   addStreamStart: (data) => set((state) => ({
     streamingMessages: {
@@ -29,7 +34,7 @@ export const useChatStore = create((set) => ({
   }),
 
   finalizeStream: (data) => set((state) => {
-    const { [data.messageId]: completedMsg, ...rest } = state.streamingMessages;
+    const { [data.messageId]: _removed, ...rest } = state.streamingMessages;
     return {
       streamingMessages: rest
     };

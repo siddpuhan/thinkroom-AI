@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-dotenv.config();
+dotenv.config({ path: new URL("./.env", import.meta.url) });
 import { createServer } from "http";
 import { Server } from "socket.io";
 
@@ -19,6 +19,12 @@ import { GroqDecisionExtraction } from "./services/ai/GroqDecisionExtraction.js"
 import { DocumentService } from "./services/documents/DocumentService.js";
 import { DecisionService } from "./services/documents/DecisionService.js";
 import { ConversationBuffer } from "./services/ai/ConversationBuffer.js";
+import { NotesDispatcher } from "./services/notes/NotesDispatcher.js";
+import { NotesService } from "./services/notes/NotesService.js";
+import { DecisionWorkflow } from "./services/decisions/DecisionWorkflow.js";
+import { SummaryService } from "./services/summary/SummaryService.js";
+import { SummaryBuilder } from "./services/summary/SummaryBuilder.js";
+import { MemoryService } from "./services/memory/MemoryService.js";
 
 // ============================================================
 // SERVER SETUP
@@ -56,6 +62,15 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/resources", resourceRoutes);
 app.post("/api/users/sync", syncUser);
 
+app.get("/api/memory/:roomId", async (req, res) => {
+  try {
+    const info = await MemoryService.getDebugInfo(req.params.roomId);
+    res.json({ success: true, ...info });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ============================================================
 // TASK EXTRACTION PIPELINE
 // Completely isolated from persona routing and chat rendering.
@@ -81,59 +96,64 @@ async function runTaskExtractionPipeline(messageText, roomId, senderName, source
     return;
   }
   console.log(`${pipelineId} ✅ PRE-FILTER: Task signal detected. Proceeding to Groq.`);
+  io.to(roomId).emit("task_generation_status", { status: 'generating' });
 
-  // STEP 2: Groq extraction
-  console.log(`${pipelineId} 🧠 EXTRACTION: Calling Groq API...`);
-  let extractedTasks = [];
   try {
-    extractedTasks = await GroqExtraction.extractTasks(messageText, roomId, senderName);
-  } catch (err) {
-    console.error(`${pipelineId} ❌ EXTRACTION: Groq call failed:`, err.message);
-    return;
-  }
-
-  console.log(`${pipelineId} 📋 EXTRACTION: Got ${extractedTasks.length} task(s) from Groq`);
-
-  if (extractedTasks.length === 0) {
-    console.log(`${pipelineId} ℹ️ EXTRACTION: No actionable tasks found. Done.`);
-    return;
-  }
-
-  // STEP 3: Persist each task and emit socket events
-  for (const taskData of extractedTasks) {
-    console.log(`${pipelineId} 💾 DB INSERT: "${taskData.title}" | assigned: ${taskData.assigned_to} | priority: ${taskData.priority} | confidence: ${taskData.confidence}`);
-    
+    // STEP 2: Groq extraction
+    console.log(`${pipelineId} 🧠 EXTRACTION: Calling Groq API...`);
+    let extractedTasks = [];
     try {
-      const newTask = await TaskService.create({
-        roomId,
-        sourceMessageId: sourceMessageId || null,
-        title: taskData.title,
-        description: taskData.description || '',
-        assignedTo: taskData.assigned_to || null,
-        priority: taskData.priority || 'medium',
-        status: 'pending',
-        deadline: taskData.deadline || null,
-        confidence: taskData.confidence || 0.7,
-        aiGenerated: true,
-        createdBy: 'AI_SYSTEM'
-      });
-
-      console.log(`${pipelineId} ✅ DB INSERT SUCCESS: Task id=${newTask.id}`);
-
-      // STEP 4: Emit task_created to all room members
-      console.log(`${pipelineId} 📡 SOCKET EMIT: task_created → room "${roomId}"`);
-      io.to(roomId).emit("task_created", {
-        ...newTask,
-        // Normalize field names for frontend compatibility
-        assignedToName: newTask.assigned_to_name || null,
-      });
-      console.log(`${pipelineId} ✅ SOCKET EMIT: task_created sent successfully`);
-
-    } catch (dbErr) {
-      console.error(`${pipelineId} ❌ DB INSERT FAILED for task "${taskData.title}":`, dbErr.message);
-      if (dbErr.code) console.error(`${pipelineId} Error code: ${dbErr.code}`);
-      if (dbErr.detail) console.error(`${pipelineId} Error detail: ${dbErr.detail}`);
+      extractedTasks = await GroqExtraction.extractTasks(messageText, roomId, senderName);
+    } catch (err) {
+      console.error(`${pipelineId} ❌ EXTRACTION: Groq call failed:`, err.message);
+      return;
     }
+
+    console.log(`${pipelineId} 📋 EXTRACTION: Got ${extractedTasks.length} task(s) from Groq`);
+
+    if (extractedTasks.length === 0) {
+      console.log(`${pipelineId} ℹ️ EXTRACTION: No actionable tasks found. Done.`);
+      return;
+    }
+
+    // STEP 3: Persist each task and emit socket events
+    for (const taskData of extractedTasks) {
+      console.log(`${pipelineId} 💾 DB INSERT: "${taskData.title}" | assigned: ${taskData.assigned_to} | priority: ${taskData.priority} | confidence: ${taskData.confidence}`);
+      
+      try {
+        const newTask = await TaskService.create({
+          roomId,
+          sourceMessageId: sourceMessageId || null,
+          title: taskData.title,
+          description: taskData.description || '',
+          assignedTo: taskData.assigned_to || null,
+          priority: taskData.priority || 'medium',
+          status: 'pending',
+          deadline: taskData.deadline || null,
+          confidence: taskData.confidence || 0.7,
+          aiGenerated: true,
+          createdBy: 'AI_SYSTEM'
+        });
+
+        console.log(`${pipelineId} ✅ DB INSERT SUCCESS: Task id=${newTask.id}`);
+
+        // STEP 4: Emit task_created to all room members
+        console.log(`${pipelineId} 📡 SOCKET EMIT: task_created → room "${roomId}"`);
+        io.to(roomId).emit("task_created", {
+          ...newTask,
+          assignedToName: newTask.assigned_to_name || null,
+        });
+        MemoryService.triggerBackgroundRebuild(roomId);
+        console.log(`${pipelineId} ✅ SOCKET EMIT: task_created sent successfully`);
+
+      } catch (dbErr) {
+        console.error(`${pipelineId} ❌ DB INSERT FAILED for task "${taskData.title}":`, dbErr.message);
+        if (dbErr.code) console.error(`${pipelineId} Error code: ${dbErr.code}`);
+        if (dbErr.detail) console.error(`${pipelineId} Error detail: ${dbErr.detail}`);
+      }
+    }
+  } finally {
+    io.to(roomId).emit("task_generation_status", { status: 'idle' });
   }
 
   console.log(`${pipelineId} 🏁 PIPELINE COMPLETE`);
@@ -160,69 +180,75 @@ async function runDecisionPipeline(roomId, messageWindow) {
     return;
   }
   console.log(`${pipelineId} ✅ PREFILTER: ${filterResult.reason} (${filterResult.matchedPhrases.join(', ')})`);
+  io.to(roomId).emit("decision_analysis_status", { status: 'analyzing' });
 
-  // STEP 2: Groq analysis
-  let documents = [];
   try {
-    documents = await GroqDecisionExtraction.analyzeConversation(
-      messageWindow, roomId, filterResult.matchedPhrases
-    );
-  } catch (err) {
-    console.error(`${pipelineId} ❌ Groq analysis failed:`, err.message);
-    console.log(`${pipelineId} ─────────────────────────────────────`);
-    return;
-  }
-
-  if (documents.length === 0) {
-    console.log(`${pipelineId} ℹ️ No decisions detected by Groq.`);
-    console.log(`${pipelineId} ─────────────────────────────────────`);
-    return;
-  }
-
-  // STEP 3: Persist and emit
-  for (const doc of documents) {
+    // STEP 2: Groq analysis
+    let documents = [];
     try {
-      const isDup = await DocumentService.isDuplicate(roomId, doc.title);
-      if (isDup) {
-        console.log(`${pipelineId} ⚠️ DUPLICATE: "${doc.title}" — skipping`);
-        continue;
-      }
-
-      const structuredContent = JSON.stringify({
-        decision: doc.decision || '',
-        reason: doc.reason || '',
-        tags: doc.tags || []
-      });
-
-      const newDoc = await DocumentService.create({
-        roomId,
-        title: doc.title,
-        content: structuredContent,
-        summary: doc.summary || '',
-        type: doc.type || 'decision',
-        participants: doc.participants || [],
-        sourceMessages: doc.sourceMessages || [],
-        confidence: doc.confidence || 0.7,
-      });
-
-      console.log(`${pipelineId} ✅ DOC CREATED: id=${newDoc.id} type=${newDoc.type} title="${newDoc.title}"`);
-      io.to(roomId).emit('document_created', newDoc);
-      console.log(`${pipelineId} 📡 SOCKET EMIT: document_created → room "${roomId}"`);
-
-      // 3.b Create lightweight decision timeline record
-      const newDecision = await DecisionService.create({
-        roomId,
-        title: doc.title,
-        decision: doc.decision || doc.summary || '',
-        reason: doc.reason || '',
-        participants: doc.participants || [],
-      });
-      io.to(roomId).emit('decision_created', newDecision);
-      console.log(`${pipelineId} 📡 SOCKET EMIT: decision_created → room "${roomId}"`);
-
-    } catch (dbErr) {
-      console.error(`${pipelineId} ❌ DB INSERT FAILED: "${doc.title}":`, dbErr.message);
+      documents = await GroqDecisionExtraction.analyzeConversation(
+        messageWindow, roomId, filterResult.matchedPhrases
+      );
+    } catch (err) {
+      console.error(`${pipelineId} ❌ Groq analysis failed:`, err.message);
+      console.log(`${pipelineId} ─────────────────────────────────────`);
+      return;
     }
+
+    if (documents.length === 0) {
+      console.log(`${pipelineId} ℹ️ No decisions detected by Groq.`);
+      console.log(`${pipelineId} ─────────────────────────────────────`);
+      return;
+    }
+
+    // STEP 3: Persist and emit
+    for (const doc of documents) {
+      try {
+        const isDup = await DocumentService.isDuplicate(roomId, doc.title);
+        if (isDup) {
+          console.log(`${pipelineId} ⚠️ DUPLICATE: "${doc.title}" — skipping`);
+          continue;
+        }
+
+        const structuredContent = JSON.stringify({
+          decision: doc.decision || '',
+          reason: doc.reason || '',
+          tags: doc.tags || []
+        });
+
+        const newDoc = await DocumentService.create({
+          roomId,
+          title: doc.title,
+          content: structuredContent,
+          summary: doc.summary || '',
+          type: doc.type || 'decision',
+          participants: doc.participants || [],
+          sourceMessages: doc.sourceMessages || [],
+          confidence: doc.confidence || 0.7,
+        });
+
+        console.log(`${pipelineId} ✅ DOC CREATED: id=${newDoc.id} type=${newDoc.type} title="${newDoc.title}"`);
+        io.to(roomId).emit('document_created', newDoc);
+        console.log(`${pipelineId} 📡 SOCKET EMIT: document_created → room "${roomId}"`);
+
+        // 3.b Create lightweight decision timeline record
+        const newDecision = await DecisionService.create({
+          roomId,
+          title: doc.title,
+          decision: doc.decision || doc.summary || '',
+          reason: doc.reason || '',
+          participants: doc.participants || [],
+        });
+        io.to(roomId).emit('decision_created', newDecision);
+        MemoryService.triggerBackgroundRebuild(roomId);
+        console.log(`${pipelineId} 📡 SOCKET EMIT: decision_created → room "${roomId}"`);
+
+      } catch (dbErr) {
+        console.error(`${pipelineId} ❌ DB INSERT FAILED: "${doc.title}":`, dbErr.message);
+      }
+    }
+  } finally {
+    io.to(roomId).emit("decision_analysis_status", { status: 'idle' });
   }
 
   console.log(`${pipelineId} 🏁 DECISION PIPELINE COMPLETE`);
@@ -278,14 +304,16 @@ io.on("connection", (socket) => {
         .catch(err => console.error(`[SOCKET] ❌ Task pipeline unhandled error:`, err));
     });
 
-    // 4. Shadow AI — push to conversation buffer + schedule decision analysis
+    // 4. Decision workflow — stage/update candidate, then finalize only after stability
     ConversationBuffer.push(roomId, message);
-    
-    // We always use scheduleAnalysis (8-second debounce). 
-    // This allows users to finish typing their thoughts before we send the window to Groq.
-    ConversationBuffer.scheduleAnalysis(roomId, (rid, window) => {
-      runDecisionPipeline(rid, window)
-        .catch(err => console.error(`[SOCKET] ❌ Decision pipeline error:`, err));
+    DecisionWorkflow.observeMessage({ roomId, message, io })
+      .catch(err => console.error(`[SOCKET] ❌ Decision workflow error:`, err));
+
+    // 5. Notes dispatcher — independent from task and decision engines
+    console.log(`[SOCKET] 📝 Routing to notes extraction pipeline...`);
+    setImmediate(() => {
+      NotesDispatcher.process({ messageText, roomId, senderName, io })
+        .catch(err => console.error(`[SOCKET] ❌ Notes pipeline unhandled error:`, err));
     });
   });
 
@@ -318,6 +346,7 @@ io.on("connection", (socket) => {
         ...updatedTask,
         assignedToName: updatedTask.assigned_to_name || null,
       });
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ task_updated emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ update_task_status error:`, err.message);
@@ -333,6 +362,7 @@ io.on("connection", (socket) => {
         ...updatedTask,
         assignedToName: updatedTask.assigned_to_name || null,
       });
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ task_updated (details) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ update_task error:`, err.message);
@@ -349,6 +379,7 @@ io.on("connection", (socket) => {
         ...updatedTask,
         assignedToName: updatedTask.assigned_to_name || null,
       });
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ task_updated (soft deleted) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ soft_delete_task error:`, err.message);
@@ -364,6 +395,7 @@ io.on("connection", (socket) => {
         ...updatedTask,
         assignedToName: updatedTask.assigned_to_name || null,
       });
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ task_updated (restored) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ restore_task error:`, err.message);
@@ -376,6 +408,7 @@ io.on("connection", (socket) => {
     try {
       await TaskService.hardDelete(taskId);
       io.to(roomId).emit("task_deleted", { taskId });
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ task_deleted emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ hard_delete_task error:`, err.message);
@@ -391,6 +424,7 @@ io.on("connection", (socket) => {
         ...updatedTask,
         assignedToName: updatedTask.assigned_to_name || null,
       });
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ task_updated (archive toggled) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ toggle_archive_task error:`, err.message);
@@ -417,6 +451,7 @@ io.on("connection", (socket) => {
     try {
       const updatedDoc = await DocumentService.softDelete(docId);
       io.to(roomId).emit("document_updated", updatedDoc);
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ document_updated (soft deleted) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ soft_delete_document error:`, err.message);
@@ -429,6 +464,7 @@ io.on("connection", (socket) => {
     try {
       const updatedDoc = await DocumentService.restore(docId);
       io.to(roomId).emit("document_updated", updatedDoc);
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ document_updated (restored) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ restore_document error:`, err.message);
@@ -441,6 +477,7 @@ io.on("connection", (socket) => {
     try {
       await DocumentService.hardDelete(docId);
       io.to(roomId).emit("document_deleted", { docId });
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ document_deleted emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ hard_delete_document error:`, err.message);
@@ -453,6 +490,7 @@ io.on("connection", (socket) => {
     try {
       const updatedDoc = await DocumentService.toggleArchive(docId, isArchived);
       io.to(roomId).emit("document_updated", updatedDoc);
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ document_updated (archive toggled) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ toggle_archive_document error:`, err.message);
@@ -479,6 +517,7 @@ io.on("connection", (socket) => {
     try {
       const updatedDec = await DecisionService.softDelete(decisionId);
       io.to(roomId).emit("decision_updated", updatedDec);
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ decision_updated (soft deleted) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ soft_delete_decision error:`, err.message);
@@ -491,6 +530,7 @@ io.on("connection", (socket) => {
     try {
       const updatedDec = await DecisionService.restore(decisionId);
       io.to(roomId).emit("decision_updated", updatedDec);
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ decision_updated (restored) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ restore_decision error:`, err.message);
@@ -503,6 +543,7 @@ io.on("connection", (socket) => {
     try {
       await DecisionService.hardDelete(decisionId);
       io.to(roomId).emit("decision_deleted", { decisionId });
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ decision_deleted emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ hard_delete_decision error:`, err.message);
@@ -515,12 +556,154 @@ io.on("connection", (socket) => {
     try {
       const updatedDec = await DecisionService.toggleArchive(decisionId, isArchived);
       io.to(roomId).emit("decision_updated", updatedDec);
+      MemoryService.triggerBackgroundRebuild(roomId);
       console.log(`[SOCKET] ✅ decision_updated (archive toggled) emitted to room ${roomId}`);
     } catch (err) {
       console.error(`[SOCKET] ❌ toggle_archive_decision error:`, err.message);
     }
   });
 
+  // ─── Notes Socket Events ─────────────────────────────────
+
+  socket.on("get_notes", async ({ roomId }, callback) => {
+    console.log(`[SOCKET] 📝 get_notes requested for room: ${roomId}`);
+    try {
+      const notes = await NotesService.getByRoom(roomId);
+      console.log(`[SOCKET] ✅ Returning ${notes.length} notes`);
+      if (typeof callback === 'function') callback(notes);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ get_notes error:`, err.message);
+      if (typeof callback === 'function') callback([]);
+    }
+  });
+
+  socket.on("soft_delete_note", async ({ noteId, roomId }) => {
+    console.log(`[SOCKET] 🗑️ soft_delete_note: note=${noteId} in room=${roomId}`);
+    try {
+      const updatedNote = await NotesService.softDelete(noteId);
+      io.to(roomId).emit("note_updated", updatedNote);
+      MemoryService.triggerBackgroundRebuild(roomId);
+      console.log(`[SOCKET] ✅ note_updated (soft deleted) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ soft_delete_note error:`, err.message);
+    }
+  });
+
+  socket.on("restore_note", async ({ noteId, roomId }) => {
+    console.log(`[SOCKET] ♻️ restore_note: note=${noteId} in room=${roomId}`);
+    try {
+      const updatedNote = await NotesService.restore(noteId);
+      io.to(roomId).emit("note_updated", updatedNote);
+      MemoryService.triggerBackgroundRebuild(roomId);
+      console.log(`[SOCKET] ✅ note_updated (restored) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ restore_note error:`, err.message);
+    }
+  });
+
+  socket.on("hard_delete_note", async ({ noteId, roomId }) => {
+    console.log(`[SOCKET] 🔥 hard_delete_note: note=${noteId} in room=${roomId}`);
+    try {
+      await NotesService.hardDelete(noteId);
+      io.to(roomId).emit("note_deleted", { noteId });
+      MemoryService.triggerBackgroundRebuild(roomId);
+      console.log(`[SOCKET] ✅ note_deleted emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ hard_delete_note error:`, err.message);
+    }
+  });
+
+  socket.on("toggle_archive_note", async ({ noteId, isArchived, roomId }) => {
+    console.log(`[SOCKET] 📦 toggle_archive_note: note=${noteId} → archived=${isArchived}`);
+    try {
+      const updatedNote = await NotesService.toggleArchive(noteId, isArchived);
+      io.to(roomId).emit("note_updated", updatedNote);
+      MemoryService.triggerBackgroundRebuild(roomId);
+      console.log(`[SOCKET] ✅ note_updated (archive toggled) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ toggle_archive_note error:`, err.message);
+    }
+  });
+
+  // ─── Summaries Socket Events ─────────────────────────────
+
+  socket.on("get_summaries", async ({ roomId }, callback) => {
+    console.log(`[SOCKET] 📊 get_summaries requested for room: ${roomId}`);
+    try {
+      const summaries = await SummaryService.getByRoom(roomId);
+      console.log(`[SOCKET] ✅ Returning ${summaries.length} summaries`);
+      if (typeof callback === 'function') callback(summaries);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ get_summaries error:`, err.message);
+      if (typeof callback === 'function') callback([]);
+    }
+  });
+
+  socket.on("request_summary", async ({ roomId, summaryType, requestorName }) => {
+    console.log(`[SOCKET] ✨ request_summary: type=${summaryType} in room=${roomId}`);
+    try {
+      // Broadcast that a summary is generating to show loading UI
+      io.to(roomId).emit("summary_generation_status", { status: 'generating', type: summaryType });
+      
+      const newSummary = await SummaryBuilder.generateSummary(roomId, summaryType, requestorName);
+      
+      io.to(roomId).emit("summary_created", newSummary);
+      MemoryService.triggerBackgroundRebuild(roomId);
+      console.log(`[SOCKET] ✅ summary_created emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ request_summary error:`, err.message);
+    } finally {
+      io.to(roomId).emit("summary_generation_status", { status: 'idle', type: summaryType });
+    }
+  });
+
+  socket.on("soft_delete_summary", async ({ summaryId, roomId }) => {
+    console.log(`[SOCKET] 🗑️ soft_delete_summary: summary=${summaryId} in room=${roomId}`);
+    try {
+      const updatedSummary = await SummaryService.softDelete(summaryId);
+      io.to(roomId).emit("summary_updated", updatedSummary);
+      MemoryService.triggerBackgroundRebuild(roomId);
+      console.log(`[SOCKET] ✅ summary_updated (soft deleted) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ soft_delete_summary error:`, err.message);
+    }
+  });
+
+  socket.on("restore_summary", async ({ summaryId, roomId }) => {
+    console.log(`[SOCKET] ♻️ restore_summary: summary=${summaryId} in room=${roomId}`);
+    try {
+      const updatedSummary = await SummaryService.restore(summaryId);
+      io.to(roomId).emit("summary_updated", updatedSummary);
+      MemoryService.triggerBackgroundRebuild(roomId);
+      console.log(`[SOCKET] ✅ summary_updated (restored) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ restore_summary error:`, err.message);
+    }
+  });
+
+  socket.on("hard_delete_summary", async ({ summaryId, roomId }) => {
+    console.log(`[SOCKET] 🔥 hard_delete_summary: summary=${summaryId} in room=${roomId}`);
+    try {
+      await SummaryService.hardDelete(summaryId);
+      io.to(roomId).emit("summary_deleted", { summaryId });
+      MemoryService.triggerBackgroundRebuild(roomId);
+      console.log(`[SOCKET] ✅ summary_deleted emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ hard_delete_summary error:`, err.message);
+    }
+  });
+
+  socket.on("toggle_archive_summary", async ({ summaryId, isArchived, roomId }) => {
+    console.log(`[SOCKET] 📦 toggle_archive_summary: summary=${summaryId} → archived=${isArchived}`);
+    try {
+      const updatedSummary = await SummaryService.toggleArchive(summaryId, isArchived);
+      io.to(roomId).emit("summary_updated", updatedSummary);
+      MemoryService.triggerBackgroundRebuild(roomId);
+      console.log(`[SOCKET] ✅ summary_updated (archive toggled) emitted to room ${roomId}`);
+    } catch (err) {
+      console.error(`[SOCKET] ❌ toggle_archive_summary error:`, err.message);
+    }
+  });
 
   // ─── Delivery Acknowledgements ─────────────────────────────
   socket.on("message-delivered", ({ clientId, senderSocketId }) => {

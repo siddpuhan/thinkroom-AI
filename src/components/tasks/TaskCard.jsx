@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 
 export const TaskCard = React.memo(({ task }) => {
   const priorityClass = {
