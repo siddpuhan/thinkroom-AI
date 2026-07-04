@@ -201,7 +201,7 @@ export const useTaskStore = create((set, get) => ({
     console.log(`[TASK STORE] upsertDecision: ${isNew ? '🆕 NEW' : '🔄 UPDATE'} decision id=${dec.decision_id} status=${status}`);
 
     set((prev) => ({
-      decisions: { ...prev.decisions, [dec.decision_id]: dec }
+      decisions: { ...prev.decisions, [dec.decision_id]: dec },
 
       ...(isNew && status === 'pending' ? {
         latestDecisionCandidate: dec,
