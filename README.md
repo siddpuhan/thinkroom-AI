@@ -1,39 +1,81 @@
-# Disaster Connect
+# ThinkRoom AI
 
-An offline-first emergency communication Progressive Web App (PWA) designed to function in disaster-affected areas without requiring an active internet connection, cell towers, or centralized infrastructure. 
+Tagline:
+AI-native collaborative workspace where AI behaves like a teammate instead of a chatbot.
 
-## Features
+## 1. Project Overview
+ThinkRoom AI is an innovative, real-time collaboration environment designed to integrate artificial intelligence seamlessly into team workflows. Instead of acting as a standalone chatbot, the AI functions as an active participant—a teammate that extracts tasks, logs decisions, and maintains the workspace in real time. 
 
-- **No Internet Needed**: Direct device-to-device messaging using WebRTC. Connect via local WiFi, ad-hoc networks, or mesh setups.
-- **Everything Saved Locally**: Critical messages, locations, and resource offers/needs are safely stored directly on your device using IndexedDB. 
-- **Auto-Sync When Back Online**: The moment connectivity is restored, data is silently and automatically synced to the cloud.
-- **Resource Exchange Mockup**: Allows users to post `NEED` (e.g., Food, Water, Medicine) and `OFFER` (e.g., Shelter, First Aid, Transport) boards.
-- **PWA Ready**: Installable as a native-like app on Android and iOS. Built with a Service Worker that uses a Network-First strategy to guarantee offline availability while keeping the UI up-to-date.
+## 2. Features
+* Realtime collaborative rooms
+* AI personas
+* AI task extraction
+* AI workspace
+* Shadow AI note-taking
+* Decision intelligence
+* Documentation generation
+* Summaries
+* Realtime sync
 
-## Tech Stack
+## 3. Architecture
+ThinkRoom AI employs a robust and scalable architecture, utilizing a modern web stack. It uses a Progressive Web App (PWA) frontend with React and Vite, communicating via Socket.IO with an Express.js Node backend. The backend interfaces with PostgreSQL for data persistence and leverages the Groq and OpenAI APIs for AI extraction and persona pipelines.
 
-- **React / Vite**: Fast, modern frontend.
-- **Service Workers**: Enables offline functionality and local caching.
-- **IndexedDB**: Persistent local storage ensuring zero data loss during power/network outages.
-- **WebRTC** (Mocked in Phase 1): Peer-to-peer connections for device discovery and messaging.
+## 4. Tech Stack
+* **Frontend:** React, Vite, Framer Motion, Zustand, Clerk (Auth)
+* **Backend:** Node.js, Express, Socket.IO
+* **Database:** PostgreSQL
+* **AI Integration:** Groq API, OpenAI API
 
-## Getting Started
+## 5. Installation
 
-To run the application locally for development:
+Clone the repository:
+```bash
+git clone https://github.com/your-username/thinkroom-ai.git
+cd thinkroom-ai
+```
 
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the Vite development server:
-   ```bash
-   npm run dev
-   ```
-4. Open your browser and navigate to `http://localhost:5173`. 
+Install dependencies for both frontend and backend:
+```bash
+# Install frontend dependencies
+npm install
 
-> **Important during development:** Ensure your DevTools "Update on reload" setting for Service Workers is checked, or clear the cache manually if you encounter stale views.
+# Install backend dependencies
+cd server
+npm install
+```
 
-## Built for Resiliency
+## 6. Environment Variables
+Create a `.env` file in the root directory and add the necessary variables:
+```env
+VITE_SOCKET_URL=http://localhost:5000
+VITE_CLERK_PUBLISHABLE_KEY=your_clerk_key
+DATABASE_URL=your_postgresql_connection_string
+GROQ_API_KEY=your_groq_api_key
+OPENAI_API_KEY=your_openai_api_key
+```
 
-Disaster Connect was heavily inspired by the necessity of humanitarian aid coordination in areas affected by floods, earthquakes, cyclones, and sweeping power outages. It's built for the moments when everything else fails.
+## 7. Running Locally
+
+Start the backend server:
+```bash
+cd server
+npm run dev
+```
+
+Start the frontend application:
+```bash
+# In the root directory
+npm run dev
+```
+
+## 8. Future Roadmap
+* Enhanced AI-driven project management
+* Extended integration with external tools (GitHub, Jira, etc.)
+* Customizable AI personas for distinct team roles
+* Advanced metrics and analytics for team productivity
+
+## 9. Screenshots placeholder
+[Placeholder for application screenshots showing the workspace, AI task extraction, and decision intelligence features.]
+
+## 10. Why ThinkRoom AI is different
+Unlike conventional tools where AI is siloed in a separate chat window, ThinkRoom AI embeds intelligence into the collaboration layer. The Shadow AI actively listens, analyzes conversations, and synthesizes actionable insights automatically. Teams can focus on brainstorming and problem-solving, while the AI teammate takes care of documentation, task assignment, and capturing critical decisions.

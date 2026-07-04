@@ -10,7 +10,7 @@ const Tech = () => {
           </div>
           <div className="lp-tech-content">
             <p>
-              Powered by Progressive Web Apps, IndexedDB, and peer-to-peer communication, Disaster Connect is designed to work when traditional systems fail.
+              Powered by Progressive Web Apps, IndexedDB, and peer-to-peer communication, ThinkRoom AI is designed to work when traditional systems fail.
             </p>
           </div>
         </div>

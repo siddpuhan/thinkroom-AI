@@ -1,6 +1,6 @@
 import { openDB } from 'idb';
 
-const DB_NAME = 'disaster-connect-db';
+const DB_NAME = 'thinkroom-ai-db';
 const MESSAGES_STORE = 'messages';
 const RESOURCES_STORE = 'resources';
 

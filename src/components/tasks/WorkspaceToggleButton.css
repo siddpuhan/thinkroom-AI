@@ -1,0 +1,66 @@
+/* WorkspaceToggleButton.css */
+
+.workspace-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 6px 14px;
+  border-radius: 100px;
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+  margin-left: 12px;
+}
+
+.workspace-toggle-btn:hover {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+}
+
+.wtb-icon {
+  font-size: 1rem;
+}
+
+.wtb-label {
+  letter-spacing: 0.02em;
+}
+
+.wtb-count {
+  color: #a78bfa;
+  font-weight: 700;
+}
+
+.wtb-indicator {
+  font-size: 0.5rem;
+  margin-left: 2px;
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.workspace-toggle-btn.pulse-anim {
+  animation: btnPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  border-color: rgba(167, 139, 250, 0.8);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+}
+
+@keyframes btnPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: .9;
+    transform: scale(1.03);
+  }
+}

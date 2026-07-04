@@ -333,8 +333,56 @@ body {
 .message-timestamp {
   font-size: 0.7rem;
   color: var(--text-light);
-  margin-top: 4px;
   text-align: right;
+}
+
+.message-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 8px;
+  min-height: 20px;
+}
+
+.ai-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-right: auto;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.toolbar-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #94a3b8;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background-color: #a855f7;
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .message-status {
@@ -359,60 +407,7 @@ body {
 }
 
 /* Input Form — pinned at bottom, never scrolls */
-.chat-input-form {
-  display: flex;
-  align-items: center;
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-color);
-  background-color: transparent;
-  flex-shrink: 0;       /* never collapse */
-}
 
-.chat-input-field {
-  flex-grow: 1;
-  border: 1px solid var(--border-color);
-  background-color: rgba(0, 0, 0, 0.2);
-  color: var(--text-dark);
-  border-radius: 20px;
-  padding: 12px 18px;
-  font-size: 1rem;
-  transition: background-color 0.2s, border-color 0.2s;
-}
-
-.chat-input-field:focus {
-  outline: none;
-  background-color: rgba(0, 0, 0, 0.4);
-  border-color: var(--primary-color);
-}
-
-.chat-send-button {
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 44px;
-  height: 44px;
-  margin-left: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s, transform 0.1s;
-  flex-shrink: 0;
-}
-
-.chat-send-button:hover:not(:disabled) {
-  background-color: #006666;
-}
-
-.chat-send-button:disabled {
-  background-color: #b0b0b0;
-  cursor: not-allowed;
-}
-
-.chat-send-button:active:not(:disabled) {
-  transform: scale(0.95);
-}
 
 @keyframes pulseRed {
   0% { background-color: #dc2626; }
@@ -459,6 +454,7 @@ body {
 .ai-message {
   align-self: flex-start;
   margin-left: 0;
+  max-width: 85%;
 }
 
 .ai-message .message-content {

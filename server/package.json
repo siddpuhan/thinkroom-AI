@@ -1,7 +1,7 @@
 {
-  "name": "disaster-connect-backend",
+  "name": "thinkroom-ai-backend",
   "version": "1.0.0",
-  "description": "Backend API for Disaster Connect",
+  "description": "Backend API for ThinkRoom AI",
   "main": "index.js",
   "type": "module",
   "scripts": {

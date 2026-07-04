@@ -1,0 +1,95 @@
+.markdown-prose {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: inherit;
+  word-wrap: break-word;
+}
+
+.markdown-prose > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-prose > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-prose p {
+  margin-top: 0.6em;
+  margin-bottom: 0.6em;
+}
+
+.markdown-prose h1, .markdown-prose h2, .markdown-prose h3, .markdown-prose h4 {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown-prose h3 { font-size: 1.15rem; }
+.markdown-prose h4 { font-size: 1.05rem; }
+
+.markdown-prose ul, .markdown-prose ol {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1.5em;
+}
+
+.markdown-prose li {
+  margin-top: 0.3em;
+}
+
+.markdown-prose code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.85em;
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.markdown-prose pre {
+  margin-top: 1em;
+  margin-bottom: 1em;
+  padding: 1.2em;
+  overflow: auto;
+  border-radius: 8px;
+  background-color: #1e1e2e !important; /* Premium dark background */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.markdown-prose pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.85rem;
+  color: inherit;
+}
+
+.markdown-prose blockquote {
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  color: #cbd5e1;
+  border-left: 3px solid rgba(168, 85, 247, 0.5); /* Purple tint for AI */
+  background-color: rgba(168, 85, 247, 0.05);
+  border-radius: 0 6px 6px 0;
+}
+
+.markdown-prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 1em;
+  margin-bottom: 1em;
+  font-size: 0.9em;
+}
+
+.markdown-prose th, .markdown-prose td {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.markdown-prose th {
+  background-color: rgba(255, 255, 255, 0.05);
+  font-weight: 600;
+}

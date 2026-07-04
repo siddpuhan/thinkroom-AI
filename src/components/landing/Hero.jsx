@@ -13,7 +13,7 @@ const Hero = ({ onEnterChat, onEnterResources }) => {
           fails
         </h1>
         <p className="lp-hero-subtitle">
-          When disasters take down networks, Disaster Connect keeps people connected using offline-first technology.
+          When disasters take down networks, ThinkRoom AI keeps people connected using offline-first technology.
         </p>
         <div className="lp-hero-actions">
           <button className="lp-hero-btn lp-hero-btn-primary" onClick={onEnterChat}>
