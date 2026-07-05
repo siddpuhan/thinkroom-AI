@@ -288,24 +288,43 @@ AITaskSection.displayName = 'AITaskSection';
 
 const AIDocumentCard = memo(({ docId, socket, roomId }) => {
   const doc = useTaskStore(useCallback(state => state.documents[docId], [docId]));
-  const [expandedContent, setExpandedContent] = useState(false);
+  const [expandedSummary, setExpandedSummary] = useState(false);
+  const [expandedParticipants, setExpandedParticipants] = useState(false);
+  const [expandedSource, setExpandedSource] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
   if (!doc) return null;
 
   const participants = Array.isArray(doc.participants) ? doc.participants : [];
+  const sourceMessages = Array.isArray(doc.source_messages) ? doc.source_messages : [];
+  
+  const typeLabels = {
+    decision: 'Decision',
+    architecture: 'Architecture',
+    meeting_notes: 'Meeting Notes',
+    summary: 'Summary'
+  };
+
+  const icons = {
+    decision: '🧠',
+    architecture: '🏗️',
+    meeting_notes: '📝',
+    summary: '📊'
+  };
+
+  // Try to parse structured content
   let details = {};
   try {
     details = JSON.parse(doc.content || '{}');
-  } catch (_e) {
-    details = { content: doc.content };
+  } catch (_unusedVariable) {
+    details = { decision: doc.content || doc.summary };
   }
 
-  const category = doc.category || 'General Documentation';
-  const status = doc.status || 'draft';
-  const isFinal = status === 'final';
+  const decision = details.decision || '';
+  const reason = details.reason || '';
+  const tags = Array.isArray(details.tags) ? details.tags : [];
   
-  const formattedTime = new Date(doc.updated_at || doc.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const formattedTime = new Date(doc.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
   const handleArchive = (e) => {
     e.stopPropagation();
@@ -347,6 +366,9 @@ const AIDocumentCard = memo(({ docId, socket, roomId }) => {
 
       {showDropdown && (
         <div className="ai-card-dropdown" onClick={(e) => e.stopPropagation()}>
+          <button className="ai-dropdown-item" onClick={() => { setExpandedSummary(true); setShowDropdown(false); }}>
+            📖 Open
+          </button>
           <button className="ai-dropdown-item" onClick={handleArchive}>
             📦 {doc.is_archived ? 'Unarchive' : 'Archive'}
           </button>
@@ -357,67 +379,119 @@ const AIDocumentCard = memo(({ docId, socket, roomId }) => {
       )}
 
       <div className="ai-doc-header">
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span className="ai-doc-badge category-badge">{category}</span>
-          <span className={`ai-doc-badge status-badge ${isFinal ? 'final' : 'draft'}`}>
-            {isFinal ? 'Final' : 'Draft'}
-          </span>
-        </div>
+        <span className="ai-doc-icon">{icons[doc.type] || '📄'}</span>
+        <span className="ai-doc-header-text">{typeLabels[doc.type] || doc.type} Document</span>
         <span className="ai-doc-time">{formattedTime}</span>
       </div>
 
       <div className="ai-doc-title-block">
+        <div className="ai-doc-label">Title</div>
         <h3 className="ai-doc-title">{doc.title}</h3>
       </div>
 
-      {doc.summary && (
+      {decision && (
         <div className="ai-doc-section">
-          <p className="ai-doc-text" style={{ fontStyle: 'italic', color: '#cbd5e1' }}>{doc.summary}</p>
+          <div className="ai-doc-label">Content</div>
+          <p className="ai-doc-text">{decision}</p>
         </div>
       )}
 
+      {reason && (
+        <div className="ai-doc-section">
+          <div className="ai-doc-label">Rationale</div>
+          <p className="ai-doc-text">{reason}</p>
+        </div>
+      )}
+
+      {tags.length > 0 && (
+        <div className="ai-doc-tags">
+          {tags.map((tag, i) => (
+            <span key={i} className="ai-doc-tag">{tag}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Collapsible: Discussion Summary */}
       <div className="ai-doc-collapsible">
         <button 
           className="ai-doc-collapsible-btn" 
-          onClick={(e) => { e.stopPropagation(); setExpandedContent(!expandedContent); }}
+          onClick={(e) => { e.stopPropagation(); setExpandedSummary(!expandedSummary); }}
         >
-          {expandedContent ? '▼ Hide Details' : '▶ Show Details'}
+          {expandedSummary ? '▼' : '▶'} Discussion Summary
         </button>
         <AnimatePresence>
-          {expandedContent && (
+          {expandedSummary && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               className="ai-doc-collapsible-content"
             >
-              {details.details && (
-                <div className="ai-doc-section" style={{ marginTop: '8px' }}>
-                  <p className="ai-doc-text">{details.details}</p>
-                </div>
-              )}
-              {details.highlights && details.highlights.length > 0 && (
-                <div className="ai-doc-section" style={{ marginTop: '12px' }}>
-                  <div className="ai-doc-label">Highlights</div>
-                  <ul style={{ paddingLeft: '20px', margin: '4px 0', color: '#f8fafc', fontSize: '0.85rem' }}>
-                    {details.highlights.map((h, i) => <li key={i}>{h}</li>)}
-                  </ul>
-                </div>
-              )}
-              {participants.length > 0 && (
-                <div className="ai-doc-section" style={{ marginTop: '12px' }}>
-                  <div className="ai-doc-label">Participants</div>
-                  <div className="ai-doc-participants">
-                    {participants.map((p, i) => (
-                      <span key={i} className="ai-doc-participant">👤 {p}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <p className="ai-doc-text">{doc.summary}</p>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* Collapsible: Participants */}
+      <div className="ai-doc-collapsible">
+        <button 
+          className="ai-doc-collapsible-btn" 
+          onClick={(e) => { e.stopPropagation(); setExpandedParticipants(!expandedParticipants); }}
+        >
+          {expandedParticipants ? '▼' : '▶'} Participants
+        </button>
+        <AnimatePresence>
+          {expandedParticipants && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="ai-doc-collapsible-content"
+            >
+              <div className="ai-doc-participants">
+                {participants.map((p, i) => (
+                  <span key={i} className="ai-doc-participant">👤 {p}</span>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Collapsible: Source Conversation */}
+      {sourceMessages.length > 0 && (
+        <div className="ai-doc-collapsible">
+          <button 
+            className="ai-doc-collapsible-btn" 
+            onClick={(e) => { e.stopPropagation(); setExpandedSource(!expandedSource); }}
+          >
+            {expandedSource ? '▼' : '▶'} Source Conversation
+          </button>
+          <AnimatePresence>
+            {expandedSource && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="ai-doc-collapsible-content"
+              >
+                <div style={{ marginTop: '4px' }}>
+                  {sourceMessages.map((msg, i) => (
+                    <div key={i} className="ai-doc-source-msg">
+                      <div className="ai-doc-source-icon">💬</div>
+                      <div className="ai-doc-source-body">
+                        <div className="ai-doc-source-name">{msg.sender_name}</div>
+                        <div className="ai-doc-source-text">{msg.text}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
     </motion.div>
   );
 });
@@ -426,27 +500,36 @@ AIDocumentCard.displayName = 'AIDocumentCard';
 const AIDocumentSection = memo(({ type, socket, roomId }) => {
   const docIdsStr = useTaskStore(
     useCallback(
-      (state) => Object.values(state.documents)
-        .filter(d => !d.is_deleted && !d.is_archived)
-        .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
-        .map(d => d.id)
-        .join(','),
-      []
+      (state) => {
+        const typeFilter = type === 'docs' ? 'all' : type;
+        let list = Object.values(state.documents);
+        if (typeFilter !== 'all') {
+          list = list.filter(d => d.type === typeFilter);
+        }
+        return list
+          .filter(d => !d.is_deleted && !d.is_archived)
+          .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+          .map(d => d.id)
+          .join(',');
+      },
+      [type]
     )
   );
 
   const docIds = useMemo(() => (docIdsStr ? docIdsStr.split(',') : []), [docIdsStr]);
 
-  if (docIds.length === 0) return (
-    <div className="ai-panel-empty">
-      <div className="ai-panel-empty-icon">📄</div>
-      <p>AI will generate documents here as decisions are made or meetings conclude.</p>
-    </div>
-  );
+  if (docIds.length === 0) {
+    return (
+      <div className="ai-panel-empty">
+        <div className="ai-panel-empty-icon">📝</div>
+        <p>No {type === 'docs' ? 'documents' : type} generated yet. I'll silently document important discussion in the background.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="ai-card-list">
-      <AnimatePresence initial={false}>
+    <div style={{ marginTop: '8px' }}>
+      <AnimatePresence>
         {docIds.map(id => (
           <AIDocumentCard key={id} docId={id} socket={socket} roomId={roomId} />
         ))}
@@ -1162,8 +1245,11 @@ const AITaskPanel = memo(({ socket, roomId, setConfirmDelete }) => {
   const tasksObj = useTaskStore(state => state.tasks);
   const docsObj = useTaskStore(state => state.documents);
   const notesObj = useTaskStore(state => state.notes);
-      const isGeneratingTask = useTaskStore(state => state.isGeneratingTask);
-    const inactivityTimer = useRef(null);
+  const decisionsObj = useTaskStore(state => state.decisions);
+  const summariesObj = useTaskStore(state => state.summaries);
+  const isGeneratingTask = useTaskStore(state => state.isGeneratingTask);
+  const isAnalyzingDecisions = useTaskStore(state => state.isAnalyzingDecisions);
+  const inactivityTimer = useRef(null);
 
   const [activeTab, setActiveTab] = useState('tasks');
 
@@ -1173,9 +1259,9 @@ const AITaskPanel = memo(({ socket, roomId, setConfirmDelete }) => {
   const completedCount = Object.values(tasksObj).filter(t => t.status === 'completed' && !t.is_deleted && !t.is_archived).length;
   const totalDocs = Object.values(docsObj).filter(d => !d.is_deleted && !d.is_archived).length;
   const totalNotes = Object.values(notesObj).filter(n => !n.deleted_at && !n.archived_at).length;
-  
-  
-  
+  const pendingDecisionCount = Object.values(decisionsObj).filter(d => d.status === 'pending' && !d.is_deleted && !d.is_archived).length;
+  const confirmedDecisionCount = Object.values(decisionsObj).filter(d => d.status === 'confirmed' && !d.is_deleted && !d.is_archived).length;
+  const totalSummaries = Object.values(summariesObj).filter(s => !s.deleted_at && !s.is_archived).length;
 
   const resetInactivityTimer = useCallback(() => {
     clearTimeout(inactivityTimer.current);
@@ -1223,13 +1309,28 @@ const AITaskPanel = memo(({ socket, roomId, setConfirmDelete }) => {
       {/* Tabs */}
       <div className="ai-panel-tabs">
         <button className={`ai-tab-btn ${activeTab === 'tasks' ? 'active' : ''}`} onClick={() => setActiveTab('tasks')}>
-          📋 Tasks
+          Tasks
         </button>
         <button className={`ai-tab-btn ${activeTab === 'notes' ? 'active' : ''}`} onClick={() => setActiveTab('notes')}>
-          📝 Notes
+          Notes
         </button>
         <button className={`ai-tab-btn ${activeTab === 'docs' ? 'active' : ''}`} onClick={() => setActiveTab('docs')}>
-          📄 Documents
+          Docs
+        </button>
+        <button className={`ai-tab-btn ${activeTab === 'decision' ? 'active' : ''}`} onClick={() => setActiveTab('decision')}>
+          Decisions
+        </button>
+        <button className={`ai-tab-btn ${activeTab === 'meeting_notes' ? 'active' : ''}`} onClick={() => setActiveTab('meeting_notes')}>
+          Meeting Notes
+        </button>
+        <button className={`ai-tab-btn ${activeTab === 'summary' ? 'active' : ''}`} onClick={() => setActiveTab('summary')}>
+          Summaries
+        </button>
+        <button className={`ai-tab-btn ${activeTab === 'archive' ? 'active' : ''}`} onClick={() => setActiveTab('archive')}>
+          📦 Archive
+        </button>
+        <button className={`ai-tab-btn ${activeTab === 'trash' ? 'active' : ''}`} onClick={() => setActiveTab('trash')} style={{ color: '#f87171' }}>
+          🗑️ Trash
         </button>
       </div>
 
@@ -1252,8 +1353,43 @@ const AITaskPanel = memo(({ socket, roomId, setConfirmDelete }) => {
       ) : activeTab === 'notes' ? (
         <div className="ai-panel-stats" style={{ background: 'rgba(34, 197, 94, 0.05)', borderColor: 'rgba(34, 197, 94, 0.15)' }}>
           <div className="ai-stat-item" style={{ flex: 'none', width: '100%', background: 'transparent', border: 'none' }}>
-            <span className="ai-stat-value" style={{ color: '#f8fafc' }}>📝 Notes</span>
+            <span className="ai-stat-value" style={{ color: '#f8fafc' }}>🗒️ Notes</span>
             <span className="ai-stat-label" style={{ color: '#94a3b8' }}>{totalNotes} active note{totalNotes === 1 ? '' : 's'} captured from chat</span>
+          </div>
+        </div>
+      ) : activeTab === 'decision' ? (
+        <div className="ai-panel-stats" style={{ background: 'rgba(56, 189, 248, 0.05)', borderColor: 'rgba(56, 189, 248, 0.15)' }}>
+          <div className="ai-stat-item" style={{ flex: 'none', width: '100%', background: 'transparent', border: 'none' }}>
+            <span className="ai-stat-value" style={{ color: '#f8fafc' }}>🧠 Decisions</span>
+            <span className="ai-stat-label" style={{ color: '#94a3b8' }}>{pendingDecisionCount} pending / {confirmedDecisionCount} confirmed</span>
+          </div>
+        </div>
+      ) : activeTab === 'trash' ? (
+        <div className="ai-panel-stats" style={{ background: 'rgba(239, 68, 68, 0.05)', borderColor: 'rgba(239, 68, 68, 0.15)' }}>
+          <div className="ai-stat-item" style={{ flex: 'none', width: '100%', background: 'transparent', border: 'none' }}>
+            <span className="ai-stat-value" style={{ color: '#ef4444' }}>🗑️ Recovery Workspace</span>
+            <span className="ai-stat-label" style={{ color: '#fca5a5' }}>Restore items or delete them permanently</span>
+          </div>
+        </div>
+      ) : activeTab === 'decision' ? (
+        <div className="ai-panel-stats" style={{ background: 'rgba(56, 189, 248, 0.05)', borderColor: 'rgba(56, 189, 248, 0.15)' }}>
+          <div className="ai-stat-item" style={{ flex: 'none', width: '100%', background: 'transparent', border: 'none' }}>
+            <span className="ai-stat-value" style={{ color: '#f8fafc' }}>🧠 Decisions</span>
+            <span className="ai-stat-label" style={{ color: '#94a3b8' }}>{pendingDecisionCount} pending / {confirmedDecisionCount} confirmed</span>
+          </div>
+        </div>
+      ) : activeTab === 'summary' ? (
+        <div className="ai-panel-stats" style={{ background: 'rgba(168, 85, 247, 0.05)', borderColor: 'rgba(168, 85, 247, 0.15)' }}>
+          <div className="ai-stat-item" style={{ flex: 'none', width: '100%', background: 'transparent', border: 'none' }}>
+            <span className="ai-stat-value" style={{ color: '#e879f9' }}>📊 Summaries</span>
+            <span className="ai-stat-label" style={{ color: '#d8b4fe' }}>{totalSummaries} saved summaries</span>
+          </div>
+        </div>
+      ) : activeTab === 'archive' ? (
+        <div className="ai-panel-stats" style={{ background: 'rgba(148, 163, 184, 0.05)', borderColor: 'rgba(148, 163, 184, 0.15)' }}>
+          <div className="ai-stat-item" style={{ flex: 'none', width: '100%', background: 'transparent', border: 'none' }}>
+            <span className="ai-stat-value" style={{ color: '#cbd5e1' }}>📦 Archives</span>
+            <span className="ai-stat-label" style={{ color: '#94a3b8' }}>View and recover archived items</span>
           </div>
         </div>
       ) : (
@@ -1301,10 +1437,26 @@ const AITaskPanel = memo(({ socket, roomId, setConfirmDelete }) => {
               </>
             )}
           </>
+        ) : activeTab === 'decision' ? (
+          <>
+            {isAnalyzingDecisions && (
+              <div className="ai-section-loading-inline">
+                <span className="ai-inline-spinner" />
+                <span>AI is analyzing project decisions...</span>
+              </div>
+            )}
+            <AIDecisionSection socket={socket} roomId={roomId} />
+          </>
         ) : activeTab === 'notes' ? (
           <NotesSection socket={socket} roomId={roomId} />
+        ) : activeTab === 'trash' ? (
+          <AITrashSection socket={socket} roomId={roomId} setConfirmDelete={setConfirmDelete} />
+        ) : activeTab === 'archive' ? (
+          <AIArchiveSection socket={socket} roomId={roomId} />
+        ) : activeTab === 'summary' ? (
+          <AISummarySection socket={socket} roomId={roomId} />
         ) : (
-          <AIDocumentSection type="all" socket={socket} roomId={roomId} />
+          <AIDocumentSection type={activeTab} socket={socket} roomId={roomId} />
         )}
       </div>
     </motion.div>
@@ -1377,6 +1529,16 @@ const AINotificationChip = memo(({ latestTask, latestDocument, latestNote, lates
             <span className="ai-chip-sparkle">🗒️</span>
             <span>{getNoteMessage(latestNote)}</span>
           </>
+        ) : isDecisionCandidate ? (
+          <>
+            <span className="ai-chip-sparkle">🧠</span>
+            <span>{getDecisionMessage(latestDecisionCandidate, false)}</span>
+          </>
+        ) : isDecisionFinal ? (
+          <>
+            <span className="ai-chip-sparkle">✨</span>
+            <span>{getDecisionMessage(latestDecisionFinal, true)}</span>
+          </>
         ) : (
           <>
             <span className="ai-chip-sparkle">✨</span>
@@ -1408,16 +1570,25 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
   const setDocuments = useTaskStore(state => state.setDocuments);
   const removeDocument = useTaskStore(state => state.removeDocument);
   const notesObj = useTaskStore(state => state.notes);
-              const openPanel  = useTaskStore(state => state.openPanel);
+  const upsertDecision = useTaskStore(state => state.upsertDecision);
+  const setDecisions = useTaskStore(state => state.setDecisions);
+  const removeDecision = useTaskStore(state => state.removeDecision);
+  const upsertSummary = useTaskStore(state => state.upsertSummary);
+  const setSummaries = useTaskStore(state => state.setSummaries);
+  const removeSummary = useTaskStore(state => state.removeSummary);
+  const openPanel  = useTaskStore(state => state.openPanel);
   const closePanel = useTaskStore(state => state.closePanel);
   const dismissNotification = useTaskStore(state => state.dismissNotification);
-  
+  const setAnalyzingDecisions = useTaskStore(state => state.setAnalyzingDecisions);
+
   const isPanelOpen      = useTaskStore(state => state.isPanelOpen);
   const showNotification = useTaskStore(state => state.showNotification);
   const latestTask       = useTaskStore(state => state.latestTask);
   const latestDocument   = useTaskStore(state => state.latestDocument);
   const latestNote       = useTaskStore(state => state.latestNote);
-      const notificationType = useTaskStore(state => state.notificationType);
+  const latestDecisionCandidate = useTaskStore(state => state.latestDecisionCandidate);
+  const latestDecisionFinal = useTaskStore(state => state.latestDecisionFinal);
+  const notificationType = useTaskStore(state => state.notificationType);
   const newTaskCount     = useTaskStore(state => state.newTaskCount);
 
   // Global Confirm Delete state
@@ -1452,14 +1623,88 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
       if (docs && docs.length > 0) setDocuments(docs);
     });
 
-    
+    socket.emit('get_decisions', { roomId }, (decs) => {
+      if (decs && decs.length > 0) setDecisions(decs);
+    });
+
+    const handleTaskCreated = (task) => upsertTask(task);
+    const handleTaskUpdated = (task) => upsertTask(task);
+    const handleTaskDeleted = ({ taskId }) => {
+      console.log('[SOCKET] task_deleted received:', taskId);
+      removeTask(taskId);
+    };
+
+    const handleDocumentCreated = (doc) => upsertDocument(doc);
+    const handleDocumentUpdated = (doc) => upsertDocument(doc);
+    const handleDocumentDeleted = ({ docId }) => {
+      console.log('[SOCKET] document_deleted received:', docId);
+      removeDocument(docId);
+    };
+
+    const handleDecisionCreated = (dec) => upsertDecision(dec);
+    const handleDecisionUpdated = (dec) => {
+      console.log('[SOCKET] decision_updated received:', dec.decision_id);
+      upsertDecision(dec);
+    };
+    const handleDecisionCandidateDetected = (dec) => {
+      console.log('[SOCKET] decision_candidate_detected received:', dec.decision_id);
+      upsertDecision(dec);
+    };
+    const handleDecisionCandidateUpdated = (dec) => {
+      console.log('[SOCKET] decision_candidate_updated received:', dec.decision_id);
+      upsertDecision(dec);
+    };
+    const handleDecisionFinalized = (payload) => {
+      const decision = payload?.decision || payload;
+      const document = payload?.document || null;
+      console.log('[SOCKET] decision_finalized received:', decision?.decision_id);
+      if (document) upsertDocument(document, { silent: true });
+      if (decision) upsertDecision(decision);
+    };
+    const handleDecisionRejected = (dec) => {
+      console.log('[SOCKET] decision_rejected received:', dec.decision_id);
+      upsertDecision(dec);
+    };
+    const handleDecisionDeleted = ({ decisionId }) => {
+      console.log('[SOCKET] decision_deleted received:', decisionId);
+      removeDecision(decisionId);
+    };
+
+    const handleDecisionAnalysisStatus = ({ status }) => {
+      setAnalyzingDecisions(status === 'analyzing');
+    };
+
+    socket.emit('get_summaries', { roomId }, (summaries) => {
+      if (summaries && summaries.length > 0) setSummaries(summaries);
+    });
+
+    const handleSummaryCreated = (summary) => upsertSummary(summary);
+    const handleSummaryUpdated = (summary) => upsertSummary(summary);
+    const handleSummaryDeleted = ({ summaryId }) => {
+      console.log('[SOCKET] summary_deleted received:', summaryId);
+      removeSummary(summaryId);
+    };
+
+    socket.on('task_created', handleTaskCreated);
+    socket.on('task_updated', handleTaskUpdated);
+    socket.on('task_deleted', handleTaskDeleted);
+
+    socket.on('document_created', handleDocumentCreated);
+    socket.on('document_updated', handleDocumentUpdated);
+    socket.on('document_deleted', handleDocumentDeleted);
+
+    socket.on('decision_created', handleDecisionCreated);
+    socket.on('decision_updated', handleDecisionUpdated);
+    socket.on('decision_candidate_detected', handleDecisionCandidateDetected);
     socket.on('decision_candidate_updated', handleDecisionCandidateUpdated);
     socket.on('decision_finalized', handleDecisionFinalized);
     socket.on('decision_rejected', handleDecisionRejected);
     socket.on('decision_deleted', handleDecisionDeleted);
     socket.on('decision_analysis_status', handleDecisionAnalysisStatus);
 
-    
+    socket.on('summary_created', handleSummaryCreated);
+    socket.on('summary_updated', handleSummaryUpdated);
+    socket.on('summary_deleted', handleSummaryDeleted);
 
     return () => {
       socket.off('task_created', handleTaskCreated);

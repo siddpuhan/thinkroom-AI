@@ -1,9 +1,7 @@
 // MemoryBuilder.js — Compiles workspace state into a text index
 
 import { TaskService } from '../tasks/TaskService.js';
-import { DecisionService } from '../documents/DecisionService.js';
 import { NotesService } from '../notes/NotesService.js';
-import { SummaryService } from '../summary/SummaryService.js';
 import { DocumentService } from '../documents/DocumentService.js';
 import { MemoryCache } from './MemoryCache.js';
 
@@ -15,20 +13,16 @@ export class MemoryBuilder {
     
     try {
       // Fetch all sources concurrently
-      const [allTasks, allDecisions, allNotes, allSummaries, allDocs] = await Promise.all([
+      const [allTasks, allNotes, allDocs] = await Promise.all([
         TaskService.getTasksByRoom(roomId),
-        DecisionService.getByRoom(roomId),
         NotesService.getByRoom(roomId),
-        SummaryService.getByRoom(roomId),
         DocumentService.getByRoom(roomId)
       ]);
 
       // Filter active items
       const pendingTasks = allTasks.filter(t => t.status === 'pending' && !t.is_deleted && !t.is_archived);
-      const activeDecisions = allDecisions.filter(d => !d.is_deleted && !d.is_archived);
       const activeNotes = allNotes.filter(n => !n.deleted_at && !n.archived_at);
-      const activeSummaries = allSummaries.filter(s => !s.deleted_at && !s.is_archived);
-      const activeDocs = allDocs.filter(d => !d.is_deleted && !d.is_archived);
+      const activeDocs = allDocs.filter(d => !d.deleted_at && !d.archived);
 
       let memorySections = [];
 
@@ -37,15 +31,6 @@ export class MemoryBuilder {
         let section = "### Pending Tasks:\n";
         pendingTasks.slice(0, 15).forEach(t => {
           section += `- [${t.priority.toUpperCase()}] ${t.title} (Assigned to: ${t.assigned_to_name || 'Unassigned'})\n`;
-        });
-        memorySections.push(section);
-      }
-
-      // Build Decisions Section
-      if (activeDecisions.length > 0) {
-        let section = "### Architecture & Decisions:\n";
-        activeDecisions.slice(0, 10).forEach(d => {
-          section += `- [${d.status.toUpperCase()}] ${d.title}: ${d.description}\n`;
         });
         memorySections.push(section);
       }
@@ -59,20 +44,11 @@ export class MemoryBuilder {
         memorySections.push(section);
       }
 
-      // Build Summaries Section
-      if (activeSummaries.length > 0) {
-        let section = "### Recent Summaries:\n";
-        activeSummaries.slice(0, 3).forEach(s => {
-          section += `- [${s.summary_type}] ${s.title}: ${s.content.substring(0, 200)}...\n`;
-        });
-        memorySections.push(section);
-      }
-
       // Build Docs Section
       if (activeDocs.length > 0) {
-        let section = "### Project Documents:\n";
-        activeDocs.slice(0, 5).forEach(d => {
-          section += `- ${d.title}\n`;
+        let section = "### Project Documents (Decisions, Summaries, Specs):\n";
+        activeDocs.slice(0, 10).forEach(d => {
+          section += `- [${d.category}] [${d.status}] ${d.title}: ${d.summary}\n`;
         });
         memorySections.push(section);
       }

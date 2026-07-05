@@ -1,7 +1,6 @@
 import { ConversationBuffer } from '../ai/ConversationBuffer.js';
 import { DecisionPrefilter } from '../ai/DecisionPrefilter.js';
 import { GroqDecisionExtraction } from '../ai/GroqDecisionExtraction.js';
-import { DecisionService } from '../documents/DecisionService.js';
 import { DocumentService } from '../documents/DocumentService.js';
 
 const FINALIZATION_WINDOW_MS = 18_000;
@@ -61,7 +60,8 @@ export class DecisionWorkflow {
   }
 
   static async loadActiveCandidate(roomId) {
-    return DecisionService.getLatestPending(roomId);
+    // We match the topic by finding the latest draft Decision
+    return DocumentService.findDraftForTopic(roomId, 'Decision');
   }
 
   static async observeMessage({ roomId, message, io }) {
@@ -106,27 +106,31 @@ export class DecisionWorkflow {
         return;
       }
 
-      const created = await DecisionService.create({
-        roomId,
-        title: evaluation.title,
+      // Convert evaluation details into document content/summary
+      const contentObj = {
         decision: evaluation.decision || '',
         reason: evaluation.reason || '',
-        participants: evaluation.participants || [],
         alternativesDiscussed: evaluation.alternativesDiscussed || [],
+      };
+
+      const created = await DocumentService.create({
+        roomId,
+        category: 'Decision',
+        title: evaluation.title,
+        status: 'draft',
+        summary: evaluation.discussionSummary || '',
+        content: JSON.stringify(contentObj),
+        participants: evaluation.participants || [],
         sourceMessages: serializeSourceMessages(evaluation.sourceMessages || []),
-        discussionSummary: evaluation.discussionSummary || '',
         confidence: evaluation.confidence || 0,
-        status: 'pending',
-        createdBy: evaluation.participants?.[0] || 'AI_SYSTEM',
       });
 
       const state = ensureState(roomId);
       state.candidate = { ...created, messagesSinceCandidate: 0 };
       state.messagesSinceCandidate = 0;
 
-      io.to(roomId).emit('decision_candidate_detected', created);
-      io.to(roomId).emit('decision_created', created);
-      console.log(`[DECISION WORKFLOW] ✅ Pending decision candidate created: ${created.title}`);
+      io.to(roomId).emit('document_created', created);
+      console.log(`[DECISION WORKFLOW] ✅ Draft Decision created: ${created.title}`);
     } finally {
       io.to(roomId).emit('decision_analysis_status', { status: 'idle' });
     }
@@ -148,11 +152,28 @@ export class DecisionWorkflow {
     io.to(roomId).emit('decision_analysis_status', { status: 'analyzing' });
 
     try {
+      // Decode content for candidate comparison
+      let candidateContent = {};
+      try {
+        candidateContent = JSON.parse(candidate.content || '{}');
+      } catch (e) {}
+
+      const legacyCandidate = {
+        title: candidate.title,
+        decision: candidateContent.decision || '',
+        reason: candidateContent.reason || '',
+        participants: candidate.participants,
+        alternatives_discussed: candidateContent.alternativesDiscussed || [],
+        source_messages: candidate.source_messages,
+        discussion_summary: candidate.summary,
+        confidence: candidate.confidence
+      };
+
       const evaluations = await GroqDecisionExtraction.analyzeConversation(
         window,
         roomId,
         filterResult.matchedPhrases,
-        candidate
+        legacyCandidate
       );
 
       const evaluation = evaluations[0];
@@ -161,48 +182,36 @@ export class DecisionWorkflow {
         return;
       }
 
+      const updatedContent = JSON.stringify({
+        decision: evaluation.decision || legacyCandidate.decision,
+        reason: evaluation.reason || legacyCandidate.reason,
+        alternativesDiscussed: evaluation.alternativesDiscussed || legacyCandidate.alternatives_discussed || [],
+      });
+
       if (evaluation.status === 'rejected' || evaluation.contradictionDetected) {
-        const rejected = await DecisionService.update(candidate.decision_id, {
-          title: evaluation.title || candidate.title,
-          decision: evaluation.decision || candidate.decision,
-          reason: evaluation.reason || candidate.reason,
-          participants: evaluation.participants || candidate.participants,
-          alternativesDiscussed: evaluation.alternativesDiscussed || candidate.alternatives_discussed || [],
-          sourceMessages: serializeSourceMessages(evaluation.sourceMessages || candidate.source_messages || []),
-          discussionSummary: evaluation.discussionSummary || candidate.discussion_summary || '',
-          confidence: evaluation.confidence || candidate.confidence || 0,
-          status: 'rejected',
-          updatedBy: 'AI_SYSTEM',
-          isDeleted: true,
-          deletedAt: new Date(),
-          rejectedAt: new Date(),
-        });
+        // Soft delete the draft document since it was rejected
+        const rejected = await DocumentService.softDelete(candidate.id);
 
         state.candidate = null;
         state.messagesSinceCandidate = 0;
         clearTimer(state);
-        io.to(roomId).emit('decision_rejected', rejected);
-        io.to(roomId).emit('decision_updated', rejected);
+        io.to(roomId).emit('document_deleted', { id: candidate.id });
         io.to(roomId).emit('decision_analysis_status', { status: 'idle' });
         return;
       }
 
-      const updated = await DecisionService.update(candidate.decision_id, {
+      const updated = await DocumentService.update(candidate.id, {
         title: evaluation.title || candidate.title,
-        decision: evaluation.decision || candidate.decision,
-        reason: evaluation.reason || candidate.reason,
+        status: 'updating',
+        summary: evaluation.discussionSummary || candidate.summary || '',
+        content: updatedContent,
         participants: evaluation.participants || candidate.participants,
-        alternativesDiscussed: evaluation.alternativesDiscussed || candidate.alternatives_discussed || [],
-        sourceMessages: serializeSourceMessages(evaluation.sourceMessages || candidate.source_messages || []),
-        discussionSummary: evaluation.discussionSummary || candidate.discussion_summary || '',
+        source_messages: serializeSourceMessages(evaluation.sourceMessages || candidate.source_messages || []),
         confidence: evaluation.confidence || candidate.confidence || 0,
-        status: 'pending',
-        updatedBy: 'AI_SYSTEM',
       });
 
       state.candidate = { ...updated, messagesSinceCandidate: (state.messagesSinceCandidate || 0) };
-      io.to(roomId).emit('decision_candidate_updated', updated);
-      io.to(roomId).emit('decision_updated', updated);
+      io.to(roomId).emit('document_updated', updated);
 
       if (this.shouldFinalize({ ...updated, messagesSinceCandidate: state.messagesSinceCandidate }, evaluation, reason)) {
         await this.finalizeCandidate(roomId, io, updated, evaluation);
@@ -213,35 +222,20 @@ export class DecisionWorkflow {
   }
 
   static async finalizeCandidate(roomId, io, candidate, evaluation) {
-    const finalizedDecision = await DecisionService.update(candidate.decision_id, {
-      title: evaluation.title || candidate.title,
-      decision: evaluation.decision || candidate.decision,
-      reason: evaluation.reason || candidate.reason,
-      participants: evaluation.participants || candidate.participants,
-      alternativesDiscussed: evaluation.alternativesDiscussed || candidate.alternatives_discussed || [],
-      sourceMessages: serializeSourceMessages(evaluation.sourceMessages || candidate.source_messages || []),
-      discussionSummary: evaluation.discussionSummary || candidate.discussion_summary || '',
-      confidence: evaluation.confidence || candidate.confidence || 0,
-      status: 'confirmed',
-      updatedBy: 'AI_SYSTEM',
-      finalizedAt: new Date(),
+    const updatedContent = JSON.stringify({
+      decision: evaluation.decision || '',
+      reason: evaluation.reason || '',
+      alternativesDiscussed: evaluation.alternativesDiscussed || [],
     });
 
-    const finalDocument = await DocumentService.create({
-      roomId,
-      title: finalizedDecision.title,
-      content: JSON.stringify({
-        decision: finalizedDecision.decision || '',
-        reason: finalizedDecision.reason || '',
-        alternativesDiscussed: finalizedDecision.alternatives_discussed || [],
-        status: 'confirmed',
-        confidence: finalizedDecision.confidence || 0,
-      }),
-      summary: finalizedDecision.discussion_summary || '',
-      type: 'decision',
-      participants: finalizedDecision.participants || [],
-      sourceMessages: finalizedDecision.source_messages || [],
-      confidence: finalizedDecision.confidence || 0,
+    const finalizedDocument = await DocumentService.update(candidate.id, {
+      title: evaluation.title || candidate.title,
+      status: 'final',
+      summary: evaluation.discussionSummary || candidate.summary || '',
+      content: updatedContent,
+      participants: evaluation.participants || candidate.participants,
+      source_messages: serializeSourceMessages(evaluation.sourceMessages || candidate.source_messages || []),
+      confidence: evaluation.confidence || candidate.confidence || 0,
     });
 
     const state = ensureState(roomId);
@@ -249,11 +243,7 @@ export class DecisionWorkflow {
     state.messagesSinceCandidate = 0;
     clearTimer(state);
 
-    io.to(roomId).emit('decision_finalized', {
-      decision: finalizedDecision,
-      document: finalDocument,
-    });
-    io.to(roomId).emit('decision_updated', finalizedDecision);
+    io.to(roomId).emit('document_updated', finalizedDocument);
     io.to(roomId).emit('decision_analysis_status', { status: 'idle' });
   }
 

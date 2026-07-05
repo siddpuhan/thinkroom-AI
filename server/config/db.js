@@ -189,62 +189,38 @@ const connectDB = async () => {
       );
     `);
 
-    // Create AI documents table (decisions, meeting notes, architecture, summaries)
+    // Drop legacy redundant tables
+    await client.query(`DROP TABLE IF EXISTS decisions CASCADE;`);
+
+    // We will drop and recreate documents table to enforce the new schema.
+    await client.query(`DROP TABLE IF EXISTS documents CASCADE;`);
+
+    // Create single knowledge hub documents table
     await client.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         room_id TEXT NOT NULL,
+        category TEXT NOT NULL CHECK(category IN (
+          'Decision', 'Meeting Summary', 'Catch Up Summary', 'Architecture', 
+          'Brainstorm', 'Research', 'Requirements', 'Sprint Summary', 
+          'Design Notes', 'General Documentation'
+        )),
         title TEXT NOT NULL,
-        content TEXT,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'updating', 'waiting', 'final', 'archived')),
         summary TEXT,
-        type TEXT NOT NULL CHECK(type IN ('decision', 'meeting_notes', 'architecture', 'summary')),
+        content TEXT,
         participants JSONB DEFAULT '[]',
         source_messages JSONB DEFAULT '[]',
         confidence FLOAT,
-        created_by_ai BOOLEAN DEFAULT true,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        deleted_at TIMESTAMP WITH TIME ZONE,
+        archived BOOLEAN DEFAULT false
       );
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_documents_room_id ON documents(room_id);`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_documents_type ON documents(type);`);
-
-    // Create lightweight decisions table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS decisions (
-        decision_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        room_id TEXT NOT NULL,
-        title TEXT NOT NULL,
-        decision TEXT NOT NULL,
-        reason TEXT,
-        alternatives_discussed JSONB DEFAULT '[]',
-        participants JSONB DEFAULT '[]',
-        source_messages JSONB DEFAULT '[]',
-        discussion_summary TEXT,
-        confidence FLOAT DEFAULT 0,
-        status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'confirmed', 'rejected', 'archived')),
-        created_by TEXT,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_decisions_room_id ON decisions(room_id);`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);`);
-
-    // Decision lifecycle migration: add fields required for staged candidate handling.
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS alternatives_discussed JSONB DEFAULT '[]';`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS source_messages JSONB DEFAULT '[]';`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS discussion_summary TEXT;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS confidence FLOAT DEFAULT 0;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS created_by TEXT;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMP WITH TIME ZONE;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMP WITH TIME ZONE;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT false;`);
-    await client.query(`ALTER TABLE decisions ADD COLUMN IF NOT EXISTS updated_by TEXT;`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);`);
 
     // Create AI notes table (independent from tasks and decisions)
     await client.query(`
@@ -272,26 +248,8 @@ const connectDB = async () => {
     await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;`);
     await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE;`);
 
-    // Create AI summaries table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS summaries (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        room_id TEXT NOT NULL,
-        summary_type TEXT NOT NULL CHECK(summary_type IN ('meeting', 'catch_up', 'daily')),
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        highlights JSONB DEFAULT '[]',
-        participants JSONB DEFAULT '[]',
-        created_by TEXT,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        deleted_at TIMESTAMP WITH TIME ZONE,
-        is_archived BOOLEAN DEFAULT false
-      );
-    `);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_summaries_room_id ON summaries(room_id);`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_summaries_type ON summaries(summary_type);`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_summaries_created_at ON summaries(created_at DESC);`);
+    // Drop legacy summaries table
+    await client.query(`DROP TABLE IF EXISTS summaries CASCADE;`);
 
     console.log("PostgreSQL connected successfully");
     client.release();

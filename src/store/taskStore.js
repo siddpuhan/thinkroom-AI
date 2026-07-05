@@ -5,38 +5,30 @@
 import { create } from 'zustand';
 
 export const useTaskStore = create((set, get) => ({
-  // ─── Task Data ────────────────────────────────────────────
+  // ─── Data Maps ────────────────────────────────────────────
   // Stored as a map by ID for O(1) upserts and deduplication
   tasks: {},
-  
-  // ─── Document & Decision Data ───────────────────────────────
   documents: {},
-  decisions: {},
   notes: {},
-  summaries: {},
 
   // ─── UI State ─────────────────────────────────────────────
   // Whether the AI task workspace panel is expanded
   isPanelOpen: false,
-  // The most recently created task (for the notification chip)
+  
+  // The most recently created items (for the notification chip)
   latestTask: null,
-  // The most recently created document or decision
   latestDocument: null,
-  // The most recently detected decision candidate
-  latestDecisionCandidate: null,
-  // The most recently finalized decision
-  latestDecisionFinal: null,
-  // The most recently created note
   latestNote: null,
-  // The most recently created summary
-  latestSummary: null,
+  
   // Shows the floating notification chip
   showNotification: false,
+  notificationType: null, // 'task', 'document', 'note'
+  
   // Count of tasks created in current "session" (resets on panel open)
   newTaskCount: 0,
+  
   // Async AI pipeline processing loading states
   isGeneratingTask: false,
-  isAnalyzingDecisions: false,
 
   // ─── Actions ──────────────────────────────────────────────
 
@@ -104,6 +96,14 @@ export const useTaskStore = create((set, get) => ({
     }));
   },
 
+  removeDocument: (docId) => {
+    set((state) => {
+      const newDocs = { ...state.documents };
+      delete newDocs[docId];
+      return { documents: newDocs };
+    });
+  },
+
   // ─── Note Actions ────────────────────────────────────────
 
   setNotes: (noteArray) => {
@@ -136,94 +136,6 @@ export const useTaskStore = create((set, get) => ({
       const newNotes = { ...state.notes };
       delete newNotes[noteId];
       return { notes: newNotes };
-    });
-  },
-
-  removeDocument: (docId) => {
-    set((state) => {
-      const newDocs = { ...state.documents };
-      delete newDocs[docId];
-      return { documents: newDocs };
-    });
-  },
-
-  // ─── Summary Actions ──────────────────────────────────────
-
-  setSummaries: (summaryArray) => {
-    console.log(`[TASK STORE] setSummaries: ${summaryArray.length} summaries loaded`);
-    set({
-      summaries: summaryArray.reduce((acc, summary) => ({ ...acc, [summary.id]: summary }), {})
-    });
-  },
-
-  upsertSummary: (summary) => {
-    const state = get();
-    const isNew = !state.summaries[summary.id];
-
-    console.log(`[TASK STORE] upsertSummary: ${isNew ? '🆕 NEW' : '🔄 UPDATE'} summary id=${summary.id} title="${summary.title}"`);
-
-    set((prev) => ({
-      summaries: { ...prev.summaries, [summary.id]: summary },
-      ...(isNew ? {
-        latestSummary: summary,
-        notificationType: 'summary',
-        showNotification: true,
-        isPanelOpen: false,
-      } : {})
-    }));
-  },
-
-  removeSummary: (summaryId) => {
-    console.log(`[TASK STORE] removeSummary: ${summaryId}`);
-    set((state) => {
-      const newSummaries = { ...state.summaries };
-      delete newSummaries[summaryId];
-      return { summaries: newSummaries };
-    });
-  },
-
-  // ─── Decision Actions ─────────────────────────────────────
-
-  setDecisions: (decArray) => {
-    console.log(`[TASK STORE] setDecisions: ${decArray.length} decisions loaded`);
-    set({
-      decisions: decArray.reduce((acc, dec) => ({ ...acc, [dec.decision_id]: dec }), {})
-    });
-  },
-
-  upsertDecision: (dec) => {
-    const state = get();
-    const isNew = !state.decisions[dec.decision_id];
-    const previous = state.decisions[dec.decision_id];
-    const status = dec.status || previous?.status || 'pending';
-    const previousStatus = previous?.status || null;
-
-    console.log(`[TASK STORE] upsertDecision: ${isNew ? '🆕 NEW' : '🔄 UPDATE'} decision id=${dec.decision_id} status=${status}`);
-
-    set((prev) => ({
-      decisions: { ...prev.decisions, [dec.decision_id]: dec },
-
-      ...(isNew && status === 'pending' ? {
-        latestDecisionCandidate: dec,
-        notificationType: 'decision_candidate',
-        showNotification: true,
-        isPanelOpen: false,
-      } : {}),
-
-      ...(!isNew && previousStatus !== 'confirmed' && status === 'confirmed' ? {
-        latestDecisionFinal: dec,
-        notificationType: 'decision_final',
-        showNotification: true,
-        isPanelOpen: false,
-      } : {}),
-    }));
-  },
-
-  removeDecision: (decisionId) => {
-    set((state) => {
-      const newDecs = { ...state.decisions };
-      delete newDecs[decisionId];
-      return { decisions: newDecs };
     });
   },
 
@@ -269,7 +181,6 @@ export const useTaskStore = create((set, get) => ({
   },
 
   setGeneratingTask: (isGenerating) => set({ isGeneratingTask: isGenerating }),
-  setAnalyzingDecisions: (isAnalyzing) => set({ isAnalyzingDecisions: isAnalyzing }),
 
   // ─── Derived Selectors (stable — use inside components) ────
 
@@ -283,42 +194,32 @@ export const useTaskStore = create((set, get) => ({
   getTotalCount: () => Object.values(get().tasks).filter(t => !t.is_deleted && !t.is_archived).length,
   getPendingCount: () => Object.values(get().tasks).filter(t => t.status === 'pending' && !t.is_deleted && !t.is_archived).length,
 
-  getDocumentsByType: (type) => {
+  getDocumentsByCategory: (category) => {
     const docs = Object.values(get().documents);
-    const activeDocs = docs.filter(d => !d.is_deleted && !d.is_archived);
-    if (!type || type === 'all') {
+    const activeDocs = docs.filter(d => !d.deleted_at && !d.archived);
+    if (!category || category === 'all') {
       return activeDocs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
     return activeDocs
-      .filter(d => d.type === type)
+      .filter(d => d.category === category)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
-  getAllDecisions: () => {
-    return Object.values(get().decisions)
-      .filter(d => !d.is_deleted && !d.is_archived)
+  getAllDocuments: () => {
+    return Object.values(get().documents)
+      .filter(d => !d.deleted_at && !d.archived)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
-  getPendingDecisions: () => {
-    return Object.values(get().decisions)
-      .filter(d => d.status === 'pending' && !d.is_deleted && !d.is_archived)
+  getTotalDocCount: () => Object.values(get().documents).filter(d => !d.deleted_at && !d.archived).length,
+
+  getActiveNotes: () => {
+    return Object.values(get().notes)
+      .filter(n => !n.deleted_at && !n.archived_at)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
-  getConfirmedDecisions: () => {
-    return Object.values(get().decisions)
-      .filter(d => d.status === 'confirmed' && !d.is_deleted && !d.is_archived)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  },
-
-  getRejectedDecisions: () => {
-    return Object.values(get().decisions)
-      .filter(d => d.status === 'rejected' || d.is_deleted)
-      .sort((a, b) => new Date(b.deleted_at || b.updated_at || 0) - new Date(a.deleted_at || a.updated_at || 0));
-  },
-
-  getTotalDocCount: () => Object.values(get().documents).filter(d => !d.is_deleted && !d.is_archived).length,
+  getTotalNoteCount: () => Object.values(get().notes).filter(n => !n.deleted_at && !n.archived_at).length,
 
   // ─── Trash Selectors ──────────────────────────────────────
 
@@ -330,14 +231,14 @@ export const useTaskStore = create((set, get) => ({
 
   getTrashDocuments: () => {
     return Object.values(get().documents)
-      .filter(d => d.is_deleted)
+      .filter(d => d.deleted_at)
       .sort((a, b) => new Date(b.deleted_at || b.updated_at || 0) - new Date(a.deleted_at || a.updated_at || 0));
   },
 
-  getTrashDecisions: () => {
-    return Object.values(get().decisions)
-      .filter(d => d.is_deleted)
-      .sort((a, b) => new Date(b.deleted_at || b.created_at || 0) - new Date(a.deleted_at || a.created_at || 0));
+  getTrashNotes: () => {
+    return Object.values(get().notes)
+      .filter(n => !!n.deleted_at)
+      .sort((a, b) => new Date(b.deleted_at || b.updated_at || 0) - new Date(a.deleted_at || a.updated_at || 0));
   },
 
   // ─── Archived Selectors ───────────────────────────────────
@@ -350,19 +251,7 @@ export const useTaskStore = create((set, get) => ({
 
   getArchivedDocuments: () => {
     return Object.values(get().documents)
-      .filter(d => d.is_archived && !d.is_deleted)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  },
-
-  getArchivedDecisions: () => {
-    return Object.values(get().decisions)
-      .filter(d => d.is_archived && !d.is_deleted)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  },
-
-  getActiveNotes: () => {
-    return Object.values(get().notes)
-      .filter(n => !n.deleted_at && !n.archived_at)
+      .filter(d => d.archived && !d.deleted_at)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   },
 
@@ -370,35 +259,5 @@ export const useTaskStore = create((set, get) => ({
     return Object.values(get().notes)
       .filter(n => !n.deleted_at && n.archived_at)
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  },
-
-  getTrashNotes: () => {
-    return Object.values(get().notes)
-      .filter(n => !!n.deleted_at)
-      .sort((a, b) => new Date(b.deleted_at || b.updated_at || 0) - new Date(a.deleted_at || a.updated_at || 0));
-  },
-
-  getTotalNoteCount: () => Object.values(get().notes).filter(n => !n.deleted_at && !n.archived_at).length,
-
-  // ─── Summary Selectors ────────────────────────────────────
-
-  getActiveSummaries: () => {
-    return Object.values(get().summaries)
-      .filter(s => !s.deleted_at && !s.is_archived)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  },
-
-  getArchivedSummaries: () => {
-    return Object.values(get().summaries)
-      .filter(s => !s.deleted_at && s.is_archived)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  },
-
-  getTrashSummaries: () => {
-    return Object.values(get().summaries)
-      .filter(s => !!s.deleted_at)
-      .sort((a, b) => new Date(b.deleted_at || b.updated_at || 0) - new Date(a.deleted_at || a.updated_at || 0));
-  },
-
-  getTotalSummaryCount: () => Object.values(get().summaries).filter(s => !s.deleted_at && !s.is_archived).length,
+  }
 }));
