@@ -1,61 +1,54 @@
 import js from "@eslint/js";
+import react from "eslint-plugin-react";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
-import tseslint from "typescript-eslint";
-import pluginReact from "eslint-plugin-react";
-import pluginReactHooks from "eslint-plugin-react-hooks";
-import pluginReactRefresh from "eslint-plugin-react-refresh";
+import tsParser from "@typescript-eslint/parser";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
+
 export default [
-  {
-    ignores: ["node_modules/**", "dist/**", "build/**", "coverage/**"],
-  },
+  { ignores: ['.next/**', 'public/**', 'dist/**', 'scratch/**', 'node_modules/**'] },
   js.configs.recommended,
   {
-    files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
-    plugins: {
-      js,
-      react: pluginReact,
-      "react-hooks": pluginReactHooks,
-      "react-refresh": pluginReactRefresh,
-    },
+    ignores: ['.next/', "dist/**", "scratch/**", "public/**", "node_modules/**"],
+    files: ["src/**/*.{js,jsx,ts,tsx}", "server/**/*.{js,ts}"],
     languageOptions: {
-      globals: globals.browser,
+      ecmaVersion: 2022,
+      sourceType: "module",
+      parser: tsParser,
       parserOptions: {
         ecmaFeatures: { jsx: true },
-        ecmaVersion: "latest",
-        sourceType: "module",
+      },
+      globals: {
+        ...globals.browser,
+        ...globals.node,
       },
     },
-    settings: { react: { version: "detect" } },
+    plugins: {
+      react,
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+      "@typescript-eslint": tsPlugin,
+    },
     rules: {
-      ...pluginReactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      ...react.configs.recommended.rules,
+      ...reactHooks.configs.recommended.rules,
       "react/prop-types": "off",
       "react/react-in-jsx-scope": "off",
-      "react/display-name": "off",
       "react/no-unescaped-entities": "off",
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" }],
-      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" }],
-      "@typescript-eslint/no-explicit-any": "off",
-    },
-  },
-  {
-    files: ["server/**/*.{js,mjs,cjs}"],
-    languageOptions: {
-      globals: globals.node,
-    },
-  },
-  ...tseslint.configs.recommended,
-  pluginReact.configs.flat.recommended,
-  {
-    files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
-    rules: {
-      "react/prop-types": "off",
-      "react/react-in-jsx-scope": "off",
       "react/display-name": "off",
-      "react/no-unescaped-entities": "off",
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" }],
-      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" }],
-      "@typescript-eslint/no-explicit-any": "off",
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true },
+      ],
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/ban-ts-comment": "off"
+    },
+    settings: {
+      react: {
+        version: "detect",
+      },
     },
   },
 ];

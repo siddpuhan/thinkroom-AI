@@ -1,3 +1,4 @@
+"use client";
 // AITaskWorkspace.jsx — The complete AI-native dynamic task and document workspace
 // Architecture:
 //   - AITaskWorkspace: root container, manages socket bindings
@@ -7,8 +8,8 @@
 
 import React, { useEffect, useCallback, useMemo, useRef, useState, memo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useTaskStore } from '../../store/taskStore.js';
-import { NotesSection } from './NotesSection.jsx';
+import { useTaskStore } from '../../store/taskStore';
+import { NotesSection } from './NotesSection';
 import './AITaskWorkspace.css';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -457,189 +458,7 @@ const AIDocumentSection = memo(({ type, socket, roomId }) => {
 AIDocumentSection.displayName = 'AIDocumentSection';
 
 // ─────────────────────────────────────────────────────────────────────────
-// Decisions Tab Components
-// ─────────────────────────────────────────────────────────────────────────
 
-const AIDecisionCard = memo(({ decisionId, socket, roomId }) => {
-  const decision = useTaskStore(useCallback(state => state.decisions[decisionId], [decisionId]));
-  const [showDropdown, setShowDropdown] = useState(false);
-
-  if (!decision) return null;
-
-  const participants = Array.isArray(decision.participants) ? decision.participants : [];
-  const alternativesDiscussed = Array.isArray(decision.alternatives_discussed || decision.alternativesDiscussed)
-    ? (decision.alternatives_discussed || decision.alternativesDiscussed)
-    : [];
-  const confidence = Number(decision.confidence || 0);
-  const formattedTime = new Date(decision.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-
-  const handleArchive = (e) => {
-    e.stopPropagation();
-    if (!socket || !roomId) return;
-    socket.emit('toggle_archive_decision', {
-      decisionId: decision.decision_id,
-      isArchived: !decision.is_archived,
-      roomId
-    });
-    setShowDropdown(false);
-  };
-
-  const handleDelete = (e) => {
-    e.stopPropagation();
-    if (!socket || !roomId) return;
-    socket.emit('soft_delete_decision', {
-      decisionId: decision.decision_id,
-      roomId
-    });
-    setShowDropdown(false);
-  };
-
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="ai-decision-card"
-      onMouseLeave={() => setShowDropdown(false)}
-    >
-      <button
-        className="ai-card-options-trigger"
-        onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}
-        title="Actions"
-      >
-        ⋮
-      </button>
-
-      {showDropdown && (
-        <div className="ai-card-dropdown" onClick={(e) => e.stopPropagation()}>
-          <button className="ai-dropdown-item" onClick={handleArchive}>
-            📦 {decision.is_archived ? 'Unarchive' : 'Archive'}
-          </button>
-          <button className="ai-dropdown-item delete" onClick={handleDelete}>
-            🗑️ Delete
-          </button>
-        </div>
-      )}
-
-      <div className="ai-decision-header">
-        <span className="ai-decision-icon">⚡</span>
-        <h4 className="ai-decision-title">{decision.title}</h4>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <span className={`ai-decision-status-pill ${decision.status || 'pending'}`}>{decision.status || 'pending'}</span>
-          <span className="ai-decision-time">{formattedTime}</span>
-        </div>
-      </div>
-      
-      <div className="ai-decision-body">
-        <div className="ai-decision-content">
-          <div className="ai-decision-text">{decision.decision}</div>
-          <div className="ai-decision-meta-row">
-            <span className="ai-decision-confidence-pill">Confidence {(confidence * 100).toFixed(0)}%</span>
-            {decision.status === 'pending' && (
-              <span className="ai-decision-pending-pill">Pending consensus</span>
-            )}
-            {decision.status === 'confirmed' && (
-              <span className="ai-decision-confirmed-pill">Confirmed</span>
-            )}
-            {decision.status === 'rejected' && (
-              <span className="ai-decision-rejected-pill">Rejected</span>
-            )}
-          </div>
-          {(decision.reason || participants.length > 0 || alternativesDiscussed.length > 0 || decision.discussion_summary) && (
-            <div className="ai-decision-meta-row">
-              {decision.reason && (
-                <span className="ai-decision-reason-pill">
-                  💡 {decision.reason}
-                </span>
-              )}
-              {alternativesDiscussed.length > 0 && (
-                <span className="ai-decision-participants-pill">
-                  🔀 {alternativesDiscussed.join(', ')}
-                </span>
-              )}
-              {participants.length > 0 && (
-                <span className="ai-decision-participants-pill">
-                  👥 {participants.join(', ')}
-                </span>
-              )}
-            </div>
-          )}
-          {decision.discussion_summary && (
-            <div className="ai-decision-summary-block">
-              <div className="ai-decision-summary-label">Discussion Summary</div>
-              <div className="ai-decision-summary-text">{decision.discussion_summary}</div>
-            </div>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-});
-AIDecisionCard.displayName = 'AIDecisionCard';
-
-const AIDecisionSection = memo(({ socket, roomId }) => {
-  const pendingDecisionIds = useTaskStore(
-    useCallback(
-      (state) => Object.values(state.decisions)
-        .filter(d => d.status === 'pending' && !d.is_deleted && !d.is_archived)
-        .sort((a, b) => new Date(b.created_at || b.updated_at || 0) - new Date(a.created_at || a.updated_at || 0))
-        .map(d => d.decision_id)
-        .join(','),
-      []
-    )
-  );
-
-  const confirmedDecisionIds = useTaskStore(
-    useCallback(
-      (state) => Object.values(state.decisions)
-        .filter(d => d.status === 'confirmed' && !d.is_deleted && !d.is_archived)
-        .sort((a, b) => new Date(b.finalized_at || b.created_at || 0) - new Date(a.finalized_at || a.created_at || 0))
-        .map(d => d.decision_id)
-        .join(','),
-      []
-    )
-  );
-
-  const pendingIds = useMemo(() => (pendingDecisionIds ? pendingDecisionIds.split(',') : []), [pendingDecisionIds]);
-  const confirmedIds = useMemo(() => (confirmedDecisionIds ? confirmedDecisionIds.split(',') : []), [confirmedDecisionIds]);
-
-  if (pendingIds.length === 0 && confirmedIds.length === 0) {
-    return (
-      <div className="ai-panel-empty">
-        <div className="ai-panel-empty-icon">⚡</div>
-        <p>No project decisions recorded yet. Pending candidates and confirmed decisions will appear here as the conversation settles.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="ai-decision-timeline">
-      {pendingIds.length > 0 && (
-        <div style={{ marginBottom: '16px' }}>
-          <div className="ai-decision-section-label">🧠 Pending Candidates ({pendingIds.length})</div>
-          <AnimatePresence>
-            {pendingIds.map(id => (
-              <AIDecisionCard key={id} decisionId={id} socket={socket} roomId={roomId} />
-            ))}
-          </AnimatePresence>
-        </div>
-      )}
-
-      {confirmedIds.length > 0 && (
-        <div style={{ marginBottom: '16px' }}>
-          <div className="ai-decision-section-label">✨ Confirmed Decisions ({confirmedIds.length})</div>
-          <AnimatePresence>
-            {confirmedIds.map(id => (
-              <AIDecisionCard key={id} decisionId={id} socket={socket} roomId={roomId} />
-            ))}
-          </AnimatePresence>
-        </div>
-      )}
-    </div>
-  );
-});
-AIDecisionSection.displayName = 'AIDecisionSection';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Trash Section Component
@@ -1096,7 +915,7 @@ const AISummarySection = memo(({ socket, roomId }) => {
 
   useEffect(() => {
     if (!socket) return;
-    const handleStatus = ({ status, type }) => {
+    const handleStatus = ({ status }) => {
       setIsGenerating(status === 'generating');
     };
     socket.on('summary_generation_status', handleStatus);
@@ -1159,23 +978,20 @@ const AUTO_COLLAPSE_MS = 60_000;
 
 const AITaskPanel = memo(({ socket, roomId, setConfirmDelete }) => {
   const closePanel = useTaskStore(state => state.closePanel);
-  const tasksObj = useTaskStore(state => state.tasks);
-  const docsObj = useTaskStore(state => state.documents);
-  const notesObj = useTaskStore(state => state.notes);
-      const isGeneratingTask = useTaskStore(state => state.isGeneratingTask);
-    const inactivityTimer = useRef(null);
+  const tasks = useTaskStore(state => state.tasks);
+  const notes = useTaskStore(state => state.notes);
+  const documents = useTaskStore(state => state.documents);
+  const isGeneratingTask = useTaskStore(state => state.isGeneratingTask);
+  const inactivityTimer = useRef(null);
 
   const [activeTab, setActiveTab] = useState('tasks');
 
   // Stats bar calculation
-  const totalTasks = Object.values(tasksObj).filter(t => !t.is_deleted && !t.is_archived).length;
-  const pendingCount = Object.values(tasksObj).filter(t => t.status === 'pending' && !t.is_deleted && !t.is_archived).length;
-  const completedCount = Object.values(tasksObj).filter(t => t.status === 'completed' && !t.is_deleted && !t.is_archived).length;
-  const totalDocs = Object.values(docsObj).filter(d => !d.is_deleted && !d.is_archived).length;
-  const totalNotes = Object.values(notesObj).filter(n => !n.deleted_at && !n.archived_at).length;
-  
-  
-  
+  const totalTasks = Object.values(tasks).filter(t => !t.is_deleted && !t.is_archived).length;
+  const pendingCount = Object.values(tasks).filter(t => t.status === 'pending' && !t.is_deleted && !t.is_archived).length;
+  const completedCount = Object.values(tasks).filter(t => t.status === 'completed' && !t.is_deleted && !t.is_archived).length;
+  const totalDocs = Object.values(documents).filter(d => !d.is_deleted && !d.is_archived).length;
+  const totalNotes = Object.values(notes).filter(n => !n.deleted_at && !n.archived_at).length;
 
   const resetInactivityTimer = useCallback(() => {
     clearTimeout(inactivityTimer.current);
@@ -1203,14 +1019,14 @@ const AITaskPanel = memo(({ socket, roomId, setConfirmDelete }) => {
           <h2 className="ai-panel-title">
             <span className="ai-panel-title-icon">✨</span>
             AI Workspace
-            {(isGeneratingTask || isAnalyzingDecisions) ? (
+            {isGeneratingTask ? (
               <span className="ai-panel-loading-spinner" title="AI is processing chat..." />
             ) : (
               <span className="ai-panel-status-dot" title="Live sync active" />
             )}
           </h2>
           <span className="ai-panel-subtitle">
-            {(isGeneratingTask || isAnalyzingDecisions) ? 'AI is processing chat...' : 'Auto-generated from chat'}
+            {isGeneratingTask ? 'AI is processing chat...' : 'Auto-generated from chat'}
           </span>
         </div>
         <div className="ai-panel-actions">
@@ -1401,14 +1217,7 @@ AINotificationChip.displayName = 'AINotificationChip';
 // ─────────────────────────────────────────────────────────────────────────
 
 export const AITaskWorkspace = memo(({ socket, roomId }) => {
-  const upsertTask = useTaskStore(state => state.upsertTask);
-  const setTasks   = useTaskStore(state => state.setTasks);
-  const removeTask = useTaskStore(state => state.removeTask);
-  const upsertDocument = useTaskStore(state => state.upsertDocument);
-  const setDocuments = useTaskStore(state => state.setDocuments);
-  const removeDocument = useTaskStore(state => state.removeDocument);
-  const notesObj = useTaskStore(state => state.notes);
-              const openPanel  = useTaskStore(state => state.openPanel);
+  const openPanel  = useTaskStore(state => state.openPanel);
   const closePanel = useTaskStore(state => state.closePanel);
   const dismissNotification = useTaskStore(state => state.dismissNotification);
   
@@ -1417,11 +1226,14 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
   const latestTask       = useTaskStore(state => state.latestTask);
   const latestDocument   = useTaskStore(state => state.latestDocument);
   const latestNote       = useTaskStore(state => state.latestNote);
-      const notificationType = useTaskStore(state => state.notificationType);
+  const notificationType = useTaskStore(state => state.notificationType);
   const newTaskCount     = useTaskStore(state => state.newTaskCount);
 
   // Global Confirm Delete state
-  const [confirmDelete, setConfirmDelete] = useState(null); // { id, type, title }
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const setTasks = useTaskStore(state => state.setTasks);
+  const setDocuments = useTaskStore(state => state.setDocuments);
 
   // Handle permanent hard deletion of items confirmed by user
   const handleConfirmPermanentDelete = useCallback(() => {
@@ -1452,38 +1264,10 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
       if (docs && docs.length > 0) setDocuments(docs);
     });
 
-    
-    socket.on('decision_candidate_updated', handleDecisionCandidateUpdated);
-    socket.on('decision_finalized', handleDecisionFinalized);
-    socket.on('decision_rejected', handleDecisionRejected);
-    socket.on('decision_deleted', handleDecisionDeleted);
-    socket.on('decision_analysis_status', handleDecisionAnalysisStatus);
-
-    
-
     return () => {
-      socket.off('task_created', handleTaskCreated);
-      socket.off('task_updated', handleTaskUpdated);
-      socket.off('task_deleted', handleTaskDeleted);
-
-      socket.off('document_created', handleDocumentCreated);
-      socket.off('document_updated', handleDocumentUpdated);
-      socket.off('document_deleted', handleDocumentDeleted);
-
-      socket.off('decision_created', handleDecisionCreated);
-      socket.off('decision_updated', handleDecisionUpdated);
-      socket.off('decision_candidate_detected', handleDecisionCandidateDetected);
-      socket.off('decision_candidate_updated', handleDecisionCandidateUpdated);
-      socket.off('decision_finalized', handleDecisionFinalized);
-      socket.off('decision_rejected', handleDecisionRejected);
-      socket.off('decision_deleted', handleDecisionDeleted);
-      socket.off('decision_analysis_status', handleDecisionAnalysisStatus);
-
-      socket.off('summary_created', handleSummaryCreated);
-      socket.off('summary_updated', handleSummaryUpdated);
-      socket.off('summary_deleted', handleSummaryDeleted);
+      // Nothing to clean up since we don't have socket.on here anymore.
     };
-  }, [socket, roomId, upsertTask, setTasks, removeTask, upsertDocument, setDocuments, removeDocument, upsertDecision, setDecisions, removeDecision, upsertSummary, setSummaries, removeSummary]);
+  }, [socket, roomId, setTasks, setDocuments]);
 
   // ── Reset state on room change ───────────────────────────
   useEffect(() => {
@@ -1503,8 +1287,6 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
             latestTask={latestTask}
             latestDocument={latestDocument}
             latestNote={latestNote}
-            latestDecisionCandidate={latestDecisionCandidate}
-            latestDecisionFinal={latestDecisionFinal}
             notificationType={notificationType}
             newTaskCount={newTaskCount}
             onOpen={openPanel}

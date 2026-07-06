@@ -1,6 +1,7 @@
+"use client";
 import React, { useEffect } from 'react';
-import { TaskColumn } from './TaskColumn.jsx';
-import { useTaskStore } from '../../store/taskStore.js';
+import { TaskColumn } from './TaskColumn';
+import { useTaskStore } from '../../store/taskStore';
 import './TaskSidebar.css';
 
 export const TaskSidebar = ({ roomId, socket }) => {
