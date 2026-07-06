@@ -1,7 +1,8 @@
+"use client";
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { SendHorizontal, Paperclip } from 'lucide-react';
-import { useChatStore } from '../../store/chatStore.js';
-import { useUser } from '@clerk/clerk-react';
+import { useChatStore } from '../../store/chatStore';
+import { useUser } from '@auth0/nextjs-auth0/client';
 import '../ChatInput.css';
 
 interface ChatInputProps {
@@ -39,10 +40,10 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = false, 
   const debouncedTypingRef = useRef<ReturnType<typeof debounce> | null>(null);
 
   // Subscribe to store updates with specific selectors (only re-renders if socket or roomId changes)
-  const socket = useChatStore(state => state.socket);
-  const roomId = useChatStore(state => state.roomId);
+  const socket = useChatStore((state: any) => state.socket);
+  const roomId = useChatStore((state: any) => state.roomId);
   const { user } = useUser();
-  const userName = user?.fullName || user?.username || 'Anonymous';
+  const userName = user?.name || user?.nickname || 'Anonymous';
 
   // Auto-resize textarea logic
   useEffect(() => {

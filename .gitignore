@@ -34,3 +34,10 @@ server/database.db-wal
 server/.env
 .env
 .env.local
+.env*.local
+
+# clerk configuration (can include secrets)
+/.clerk/
+
+# next build files
+.next/

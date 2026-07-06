@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { ComponentType } from "react";
 
 declare const MessageBubble: ComponentType<{

@@ -18,13 +18,13 @@ ThinkRoom AI is an innovative, real-time collaboration environment designed to i
 * Realtime sync
 
 ## 3. Architecture
-ThinkRoom AI employs a robust and scalable architecture, utilizing a modern web stack. It uses a Progressive Web App (PWA) frontend with React and Vite, communicating via Socket.IO with an Express.js Node backend. The backend interfaces with PostgreSQL for data persistence and leverages the Groq and OpenAI APIs for AI extraction and persona pipelines.
+ThinkRoom AI employs a robust and scalable architecture, utilizing a modern web stack. It uses a Next.js frontend, communicating via Socket.IO with an Express.js Node backend. The backend interfaces with PostgreSQL for data persistence and leverages the Gemini and OpenAI APIs for AI extraction and persona pipelines.
 
 ## 4. Tech Stack
-* **Frontend:** React, Vite, Framer Motion, Zustand, Clerk (Auth)
+* **Frontend:** Next.js, Framer Motion, Zustand, Auth0 (Auth)
 * **Backend:** Node.js, Express, Socket.IO
 * **Database:** PostgreSQL
-* **AI Integration:** Groq API, OpenAI API
+* **AI Integration:** Gemini API, OpenAI API
 
 ## 5. Installation
 
@@ -34,23 +34,22 @@ git clone https://github.com/your-username/thinkroom-ai.git
 cd thinkroom-ai
 ```
 
-Install dependencies for both frontend and backend:
+Install dependencies:
 ```bash
-# Install frontend dependencies
-npm install
-
-# Install backend dependencies
-cd server
-npm install
+pnpm install
 ```
 
 ## 6. Environment Variables
-Create a `.env` file in the root directory and add the necessary variables:
+Create a `.env.local` file in the root directory:
 ```env
-VITE_SOCKET_URL=http://localhost:5000
-VITE_CLERK_PUBLISHABLE_KEY=your_clerk_key
+APP_BASE_URL=http://localhost:3000
+AUTH0_DOMAIN=your_auth0_domain
+AUTH0_CLIENT_ID=your_client_id
+AUTH0_CLIENT_SECRET=your_client_secret
+AUTH0_SECRET=your_session_secret
+AUTH0_AUDIENCE=your_api_audience
 DATABASE_URL=your_postgresql_connection_string
-GROQ_API_KEY=your_groq_api_key
+GEMINI_API_KEY=your_gemini_api_key
 OPENAI_API_KEY=your_openai_api_key
 ```
 

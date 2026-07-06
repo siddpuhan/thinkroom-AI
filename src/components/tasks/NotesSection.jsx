@@ -1,6 +1,7 @@
+"use client";
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useTaskStore } from '../../store/taskStore.js';
+import { useTaskStore } from '../../store/taskStore';
 import './NotesSection.css';
 
 const NOTE_META = {

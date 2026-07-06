@@ -1,7 +1,8 @@
+"use client";
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TaskCard } from './TaskCard.jsx';
-import { useTaskStore } from '../../store/taskStore.js';
+import { TaskCard } from './TaskCard';
+import { useTaskStore } from '../../store/taskStore';
 
 export const TaskColumn = React.memo(({ title, status }) => {
   const tasksObj = useTaskStore(state => state.tasks);

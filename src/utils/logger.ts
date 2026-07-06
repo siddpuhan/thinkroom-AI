@@ -10,7 +10,7 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 // Default log level: 'info' in production, 'debug' in development
 const isDev = typeof window !== 'undefined' && 
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  ((typeof window !== 'undefined' ? window.location.hostname : '') === 'localhost' || (typeof window !== 'undefined' ? window.location.hostname : '') === '127.0.0.1');
 const currentLevel: LogLevel = isDev ? 'debug' : 'info';
 
 const shouldLog = (level: LogLevel): boolean => {

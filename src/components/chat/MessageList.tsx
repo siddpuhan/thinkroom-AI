@@ -1,3 +1,4 @@
+"use client";
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { List, ListImperativeAPI, RowComponentProps } from 'react-window';
 import MessageBubble from '../../MessageBubble';
