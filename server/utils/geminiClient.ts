@@ -1,14 +1,20 @@
-import Groq from "groq-sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from "dotenv";
 import { logger } from "./logger.js";
 
 dotenv.config();
 
-export const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const apiKey = process.env.GEMINI_API_KEY;
+
+if (!apiKey) {
+  logger.warn("GEMINI-CLIENT", "GEMINI_API_KEY environment variable is not set. AI capabilities will be disabled.");
+}
+
+export const googleAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
 /**
- * Executes a Groq API call function with exponential backoff retries.
- * @param {Function} apiCallFn - The async function that makes the Groq API call.
+ * Executes a Gemini API call function with exponential backoff retries.
+ * @param {Function} apiCallFn - The async function that makes the Gemini API call.
  * @param {number} maxRetries - Maximum number of retry attempts. Default is 3.
  * @param {number} initialDelay - Initial delay in milliseconds. Default is 1000ms.
  * @returns {Promise<any>} - The resolved result from the API call.
@@ -18,24 +24,23 @@ export async function withRetry(apiCallFn, maxRetries = 3, initialDelay = 1000) 
   while (true) {
     try {
       return await apiCallFn();
-    } catch (error) {
+    } catch (error: any) {
       attempt++;
       
-      // Determine if error is a rate limit or service error that's retryable
       const statusCode = error.status || error.statusCode;
-      const isRateLimit = statusCode === 429;
+      const isRateLimit = statusCode === 429 || error.message?.includes("RESOURCE_EXHAUSTED");
       const isServerError = statusCode >= 500;
       const isNetworkError = !statusCode; // DNS or connection failure
       
       const shouldRetry = isRateLimit || isServerError || isNetworkError;
       
       if (attempt >= maxRetries || !shouldRetry) {
-        logger.error("GROQ-CLIENT", `Call failed after ${attempt} attempts. Error: ${error.message}`);
+        logger.error("GEMINI-CLIENT", `Call failed after ${attempt} attempts. Error: ${error.message}`);
         throw error;
       }
       
       const delay = initialDelay * Math.pow(2, attempt - 1);
-      logger.warn("GROQ-CLIENT", `Attempt ${attempt} failed with ${statusCode || 'NetworkError'}: ${error.message}. Retrying in ${delay}ms...`);
+      logger.warn("GEMINI-CLIENT", `Attempt ${attempt} failed with ${statusCode || 'NetworkError'}: ${error.message}. Retrying in ${delay}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }

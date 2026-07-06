@@ -1,4 +1,4 @@
-import { groq, withRetry } from "../utils/groqClient.js";
+import { googleAI, withRetry } from "../utils/geminiClient.js";
 import { getDB } from "../config/db.js";
 import { logger } from "../utils/logger.js";
 import dotenv from "dotenv";
@@ -10,6 +10,10 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
   const pool = getDB();
   
   try {
+    if (!googleAI) {
+      throw new Error("Gemini API client is not configured.");
+    }
+
     // 1. Fetch Room History (last 15 messages)
     const historyResult = await pool.query(
       `SELECT sender_name, text FROM messages WHERE room_id = $1 ORDER BY created_at DESC LIMIT 15`, 
@@ -21,15 +25,6 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
     // 1b. Fetch Room Memory Engine Context
     const memoryContext = await MemoryService.getContext(roomId);
 
-    // 2. Build Prompt Context
-    const messages = [
-      { 
-        role: "system", 
-        content: `${persona.role}\n\n${memoryContext}\n\nRecent Conversation History:\n${chatHistory}` 
-      },
-      { role: "user", content: cleanPrompt }
-    ];
-
     // 3. Inform Frontend that streaming is starting
     io.to(roomId).emit("ai_stream_start", {
       messageId, 
@@ -38,18 +33,23 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
       color: persona.color
     });
 
+    const model = googleAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
     // 4. Initialize Stream with retry mechanism
-    const stream = await withRetry(() => groq.chat.completions.create({
-      messages: messages as any,
-      model: persona.model,
-      stream: true,
+    const resultStream = await withRetry(() => model.generateContentStream({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `${persona.role}\n\n${memoryContext}\n\nRecent Conversation History:\n${chatHistory}\n\nUser input: ${cleanPrompt}` }]
+        }
+      ]
     }));
 
     let fullResponse = "";
 
     // 5. Stream chunks over Socket.IO
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || "";
+    for await (const chunk of resultStream.stream) {
+      const content = chunk.text() || "";
       fullResponse += content;
       
       io.to(roomId).emit("ai_stream_chunk", {
@@ -70,8 +70,8 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
       text: fullResponse,
       created_at: insertResult.rows[0].created_at
     });
-  } catch (error) {
-    logger.error("GROQ-SERVICE", `AI Stream Error: ${error.message}`, error);
+  } catch (error: any) {
+    logger.error("GEMINI-SERVICE", `AI Stream Error: ${error.message}`, error);
     io.to(roomId).emit("ai_stream_end", {
       messageId,
       finalDbId: `error-${messageId}`,
@@ -81,3 +81,4 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
     });
   }
 }
+

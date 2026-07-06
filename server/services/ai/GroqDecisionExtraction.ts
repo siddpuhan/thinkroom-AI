@@ -1,7 +1,7 @@
-// GroqDecisionExtraction.js — Groq-powered decision/document extraction from conversation windows.
+// GroqDecisionExtraction.js — Gemini-powered decision/document extraction from conversation windows.
 // Only called AFTER DecisionPrefilter passes. Analyzes 10-20 messages as a conversation.
 
-import { groq, withRetry } from '../../utils/groqClient.js';
+import { googleAI, withRetry } from '../../utils/geminiClient.js';
 import dotenv from 'dotenv';
 import { logger } from '../../utils/logger.js';
 dotenv.config();
@@ -16,12 +16,12 @@ export class GroqDecisionExtraction {
    * @returns {Promise<Array>} - Array of document objects
    */
   static async analyzeConversation(messageWindow, roomId, matchedPhrases = [], currentCandidate = null) {
-    if (!groq) {
-      console.error('[DECISION EXTRACTION] ❌ No Groq client available.');
+    if (!googleAI) {
+      console.error('[DECISION EXTRACTION] ❌ No Gemini client available.');
       return [];
     }
 
-    console.log(`[DECISION EXTRACTION] 🚀 Analyzing ${messageWindow.length} messages for decisions`);
+    console.log(`[DECISION EXTRACTION] 🚀 Analyzing ${messageWindow.length} messages for decisions via Gemini`);
     console.log(`[DECISION EXTRACTION] Prefilter phrases: ${matchedPhrases.join(', ')}`);
 
     // Format the conversation window for the prompt
@@ -56,7 +56,7 @@ CRITICAL RULES:
 - Only return CONFIRMED when confidence is above 0.85 and the discussion is stable.
 - Return REJECTED when the conversation clearly invalidates the candidate.
 
-RESPOND WITH STRICT JSON ONLY:
+RESPOND WITH STRICT JSON ONLY (no markdown formatting block):
 {
   "decisions": [
     {
@@ -94,23 +94,25 @@ Conversation:
 Conversation:
 [1] Dave: "Maybe we should use Tailwind"
 
-→ {"decisions": []}  (Single message, no discussion/agreement)${existingCandidateBlock}`;
+→ {"decisions": []}${existingCandidateBlock}`;
 
     try {
-      logger.info("DECISION-EXTRACTION", `📡 Calling Groq API...`);
+      logger.info("DECISION-EXTRACTION", `📡 Calling Gemini API (model: gemini-2.5-flash)...`);
 
-      const completion = await withRetry(() => groq.chat.completions.create({
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Analyze this conversation for decisions and evolving decision candidates.\n\n${conversationText}\n\nParticipants: ${participants.join(', ')}` }
-        ],
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.1,
-        max_tokens: 1500,
-        response_format: { type: 'json_object' }
+      const model = googleAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
+
+      const response = await withRetry(() => model.generateContent({
+        contents: [
+          { role: 'user', parts: [{ text: `${systemPrompt}\n\nAnalyze this conversation for decisions and evolving decision candidates.\n\n${conversationText}\n\nParticipants: ${participants.join(', ')}` }] }
+        ]
       }));
 
-      const raw = completion.choices?.[0]?.message?.content;
+      const raw = response.response.text();
       console.log(`[DECISION EXTRACTION] 📨 Raw response: ${raw?.substring(0, 300)}`);
 
       if (!raw) return [];
@@ -152,9 +154,10 @@ Conversation:
         participants: decision.participants.length > 0 ? decision.participants : participants,
       }));
 
-    } catch (err) {
-      console.error(`[DECISION EXTRACTION] ❌ Groq API failed:`, err.message);
+    } catch (err: any) {
+      console.error(`[DECISION EXTRACTION] ❌ Gemini API failed:`, err.message);
       return [];
     }
   }
 }
+

@@ -1,4 +1,4 @@
-import { groq, withRetry } from '../../utils/groqClient.js';
+import { googleAI, withRetry } from '../../utils/geminiClient.js';
 import { logger } from '../../utils/logger.js';
 
 const ALLOWED_TYPES = new Set(['Reminder', 'Idea', 'Risk', 'Observation', 'Resource']);
@@ -28,8 +28,8 @@ function normalizeNote(note) {
 
 export class GroqNotesExtraction {
   static async extractNotes(messageText, roomId, authorName, matchedTypes = []) {
-    if (!groq) {
-      console.error('[NOTES EXTRACTION] ❌ No Groq client available.');
+    if (!googleAI) {
+      console.error('[NOTES EXTRACTION] ❌ No Gemini client available.');
       return [];
     }
 
@@ -53,7 +53,7 @@ RULES:
 6. Keep content useful and slightly more descriptive than the title.
 7. Confidence must be between 0.0 and 1.0.
 
-REQUIRED OUTPUT FORMAT:
+REQUIRED OUTPUT FORMAT (strict JSON, no markdown formatting block):
 {
   "notes": [
     {
@@ -82,32 +82,31 @@ Message: "Hello there"
 → {"notes":[]}`;
 
     try {
-      logger.info('NOTES-EXTRACTION', '📡 Calling Groq API...');
+      logger.info('NOTES-EXTRACTION', '📡 Calling Gemini API (model: gemini-2.5-flash)...');
 
-      const completion = await withRetry(() => groq.chat.completions.create({
-        messages: [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: `Analyze this message for durable notes:\n\nMessage: "${messageText}"\nAuthor: ${authorName || 'Unknown'}\nRoom: ${roomId}\nHints: ${matchedTypes.join(', ') || 'none'}`,
-          },
-        ],
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.1,
-        max_tokens: 1200,
-        response_format: { type: 'json_object' },
+      const model = googleAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+        }
+      });
+
+      const response = await withRetry(() => model.generateContent({
+        contents: [
+          { role: 'user', parts: [{ text: `${systemPrompt}\n\nAnalyze this message for durable notes:\n\nMessage: "${messageText}"\nAuthor: ${authorName || 'Unknown'}\nRoom: ${roomId}\nHints: ${matchedTypes.join(', ') || 'none'}` }] }
+        ]
       }));
 
-      const raw = completion.choices?.[0]?.message?.content;
+      const raw = response.response.text();
       if (!raw) return [];
 
       const parsed = JSON.parse(raw);
       const notes = Array.isArray(parsed.notes) ? parsed.notes : [];
       const normalized = notes.map(normalizeNote).filter(Boolean);
-      logger.info('NOTES-EXTRACTION', `✅ Extracted ${normalized.length} valid note(s) from ${notes.length} detected`);
+      logger.info('NOTES-EXTRACTION', `` + `✅ Extracted ${normalized.length} valid note(s) from ${notes.length} detected`);
       return normalized;
-    } catch (err) {
-      console.error('[NOTES EXTRACTION] ❌ Groq API failed:', err.message || err);
+    } catch (err: any) {
+      console.error('[NOTES EXTRACTION] ❌ Gemini API failed:', err.message || err);
       return [];
     }
   }
@@ -115,4 +114,4 @@ Message: "Hello there"
   static normalizeNote(note) {
     return normalizeNote(note);
   }
-}
+}

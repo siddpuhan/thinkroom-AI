@@ -1,15 +1,18 @@
-import Groq from "groq-sdk";
+import { googleAI } from "../utils/geminiClient.js";
 import { getDB } from "../config/db.js";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
 export const processThinkRoomAI = async (roomId, userQuestion, io) => {
   const pool = getDB();
   
   try {
+    if (!googleAI) {
+      console.error("Gemini API is not configured.");
+      return;
+    }
+
     // 1. Look Back: Get the last 10 messages so the AI isn't "clueless"
     const historyResult = await pool.query(`
       SELECT sender_name, text 
@@ -24,21 +27,23 @@ export const processThinkRoomAI = async (roomId, userQuestion, io) => {
     // 2. Think: Format them for the AI to read like a script
     const chatHistory = history.reverse().map(m => `${m.sender_name || 'User'}: ${m.text}`).join('\n');
 
-    const completion = await groq.chat.completions.create({
-      messages: [
-        { 
-          role: "system", 
-          content: `You are ThinkRoom AI. You are a helpful teammate in this chat. 
-                    Use the following history to answer the user's question.
-                    Keep your answers concise and helpful.
-                    History:\n${chatHistory}` 
+    const model = googleAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const chat = model.startChat({
+      history: [
+        {
+          role: "user",
+          parts: [{ text: `System context: You are ThinkRoom AI, a helpful teammate in this chat. Use the following history to answer questions concisely.\nHistory:\n${chatHistory}` }]
         },
-        { role: "user", content: userQuestion.replace('@ai', '').trim() },
-      ],
-      model: "llama-3.3-70b-versatile",
+        {
+          role: "model",
+          parts: [{ text: "Understood. I will use the history context to assist the team as ThinkRoom AI." }]
+        }
+      ]
     });
 
-    const aiReply = completion.choices[0].message.content;
+    const userText = userQuestion.replace('@ai', '').trim();
+    const result = await chat.sendMessage(userText);
+    const aiReply = result.response.text();
 
     // 3. Speak: Save the AI's answer back to PostgreSQL
     const insertResult = await pool.query(`
@@ -62,3 +67,4 @@ export const processThinkRoomAI = async (roomId, userQuestion, io) => {
     console.error("ThinkRoom AI Error:", error);
   }
 };
+

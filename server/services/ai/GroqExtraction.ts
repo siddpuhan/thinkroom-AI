@@ -1,9 +1,9 @@
-// GroqExtraction.js — AI Task Extraction Pipeline
-// Responsibility: Given a message, extract structured task JSON via Groq LLM.
+// GroqExtraction.js — AI Task Extraction Pipeline (Migrated to Gemini)
+// Responsibility: Given a message, extract structured task JSON via Gemini LLM.
 // IMPORTANT: assigned_to stores a display NAME string (not a user FK id).
 // This avoids PostgreSQL foreign key violations entirely.
 
-import { groq, withRetry } from "../../utils/groqClient.js";
+import { googleAI, withRetry } from "../../utils/geminiClient.js";
 import dotenv from "dotenv";
 import { getDB } from "../../config/db.js";
 import { logger } from "../../utils/logger.js";
@@ -19,8 +19,13 @@ export class GroqExtraction {
    * Returns an array of task objects, or empty array if none detected.
    */
   static async extractTasks(messageText, roomId, authorName) {
-    console.log(`[GROQ EXTRACTION] 🚀 Starting extraction for message: "${messageText.substring(0, 100)}"`);
-    console.log(`[GROQ EXTRACTION] Room: ${roomId}, Author: ${authorName}`);
+    console.log(`[GEMINI EXTRACTION] 🚀 Starting task extraction for message: "${messageText.substring(0, 100)}"`);
+    console.log(`[GEMINI EXTRACTION] Room: ${roomId}, Author: ${authorName}`);
+
+    if (!googleAI) {
+      console.error("[GEMINI EXTRACTION] ❌ Gemini API is not configured.");
+      return [];
+    }
 
     const pool = getDB();
 
@@ -32,9 +37,9 @@ export class GroqExtraction {
         [roomId]
       );
       roomMembers = membersResult.rows.map(r => r.sender_name).filter(Boolean);
-      console.log(`[GROQ EXTRACTION] Room members for context: ${JSON.stringify(roomMembers)}`);
-    } catch (e) {
-      console.error("[GROQ EXTRACTION] ⚠️ Could not fetch room members:", e.message);
+      console.log(`[GEMINI EXTRACTION] Room members for context: ${JSON.stringify(roomMembers)}`);
+    } catch (e: any) {
+      console.error("[GEMINI EXTRACTION] ⚠️ Could not fetch room members:", e.message);
     }
 
     const systemPrompt = `You are an expert project management AI assistant specialized in extracting actionable tasks from conversational messages.
@@ -54,7 +59,7 @@ EXTRACTION RULES:
 5. "confidence" is a float 0.0–1.0. 0.9+ = very clear task. 0.7 = likely task. 0.5 = possible task.
 6. If the message contains NO actionable tasks, return: {"tasks": []}
 
-REQUIRED OUTPUT FORMAT (strict JSON, no markdown, no explanations):
+REQUIRED OUTPUT FORMAT (strict JSON, no markdown formatting block, no explanations):
 {
   "tasks": [
     {
@@ -73,7 +78,7 @@ Message: "Siddharth prepare the excel sheet"
 → {"tasks": [{"title": "Prepare the excel sheet", "description": "", "assigned_to": "Siddharth", "priority": "medium", "deadline": null, "confidence": 0.88}]}
 
 Message: "Assign Siddharth to complete authentication by Friday"
-→ {"tasks": [{"title": "Complete authentication", "description": "", "assigned_to": "Siddharth", "priority": "high", "deadline": "<next friday ISO>", "confidence": 0.95}]}
+→ {"tasks": [{"title": "Complete authentication", "description": "", "assigned_to": "Siddharth", "priority": "high", "deadline": "2026-07-10T12:00:00Z", "confidence": 0.95}]}
 
 Message: "We need to attend the meeting, prepare the slides, and buy the new equipment"
 → {"tasks": [{"title": "Attend the meeting", ...}, {"title": "Prepare the slides", ...}, {"title": "Buy the new equipment", ...}]}
@@ -82,88 +87,81 @@ Message: "How are you doing today?"
 → {"tasks": []}`;
 
     try {
-      logger.info("GROQ-EXTRACTION", `📡 Calling Groq API (model: llama-3.3-70b-versatile)...`);
+      logger.info("GEMINI-EXTRACTION", `📡 Calling Gemini API (model: gemini-2.5-flash)...`);
       
-      const completion = await withRetry(() => groq.chat.completions.create({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Extract tasks from this message: "${messageText}"` }
-        ],
-        model: "llama-3.3-70b-versatile",
-        temperature: 0.1,
-        max_tokens: 1024,
-        response_format: { type: "json_object" }
+      const model = googleAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+        }
+      });
+
+      const response = await withRetry(() => model.generateContent({
+        contents: [
+          { role: "user", parts: [{ text: `${systemPrompt}\n\nExtract tasks from this message: "${messageText}"` }] }
+        ]
       }));
 
-      const rawJson = completion.choices[0]?.message?.content;
-      console.log(`[GROQ EXTRACTION] 📨 Raw Groq response: ${rawJson}`);
+      const rawJson = response.response.text();
+      console.log(`[GEMINI EXTRACTION] 📨 Raw Gemini response: ${rawJson}`);
 
       if (!rawJson) {
-        console.error("[GROQ EXTRACTION] ❌ Empty response from Groq");
+        console.error("[GEMINI EXTRACTION] ❌ Empty response from Gemini");
         return [];
       }
 
       let parsed;
       try {
         parsed = JSON.parse(rawJson);
-      } catch (parseErr) {
-        console.error("[GROQ EXTRACTION] ❌ JSON parse failed:", parseErr.message);
-        console.error("[GROQ EXTRACTION] Raw content was:", rawJson);
+      } catch (parseErr: any) {
+        console.error("[GEMINI EXTRACTION] ❌ JSON parse failed:", parseErr.message);
+        console.error("[GEMINI EXTRACTION] Raw content was:", rawJson);
         return [];
       }
 
-      // Handle both {tasks: [...]} and flat single-task objects
       let tasks = [];
       if (Array.isArray(parsed.tasks)) {
         tasks = parsed.tasks;
       } else if (parsed.title) {
-        // Legacy single-task format fallback
         tasks = [parsed];
       } else {
-        console.log("[GROQ EXTRACTION] ℹ️ No tasks in response");
+        console.log("[GEMINI EXTRACTION] ℹ️ No tasks in response");
         return [];
       }
 
-      // Filter by confidence threshold and validate required fields
       const validTasks = tasks.filter(task => {
         if (!task.title || typeof task.title !== 'string' || task.title.trim() === '') {
-          console.log(`[GROQ EXTRACTION] ⚠️ Skipping task with no title`);
+          console.log(`[GEMINI EXTRACTION] ⚠️ Skipping task with no title`);
           return false;
         }
         const confidence = parseFloat(task.confidence) || 0;
         if (confidence < CONFIDENCE_THRESHOLD) {
-          console.log(`[GROQ EXTRACTION] ⚠️ Skipping task "${task.title}" — confidence ${confidence} below threshold ${CONFIDENCE_THRESHOLD}`);
+          console.log(`[GEMINI EXTRACTION] ⚠️ Skipping task "${task.title}" — confidence ${confidence} below threshold ${CONFIDENCE_THRESHOLD}`);
           return false;
         }
         return true;
       });
 
-      console.log(`[GROQ EXTRACTION] ✅ Extracted ${validTasks.length} valid task(s) from ${tasks.length} detected`);
+      console.log(`[GEMINI EXTRACTION] ✅ Extracted ${validTasks.length} valid task(s) from ${tasks.length} detected`);
       
       return validTasks.map(task => ({
         title: task.title.trim(),
         description: task.description || '',
-        assigned_to: task.assigned_to || null,    // NAME string, not a DB FK
+        assigned_to: task.assigned_to || null,
         priority: ['low', 'medium', 'high', 'urgent'].includes(task.priority) ? task.priority : 'medium',
         deadline: task.deadline || null,
         confidence: parseFloat(task.confidence) || 0.7,
       }));
 
-    } catch (err) {
-      if (err.status === 401 || err.status === 403) {
-        console.error(`[GROQ EXTRACTION] 🔑 API Key Error (${err.status}): Check GROQ_API_KEY in server/.env`);
-      } else if (err.status === 429) {
-        console.error(`[GROQ EXTRACTION] ⏱️ Rate limited by Groq API`);
-      } else {
-        console.error(`[GROQ EXTRACTION] ❌ Groq API call failed:`, err.message || err);
-      }
+    } catch (err: any) {
+      console.error(`[GEMINI EXTRACTION] ❌ Gemini API call failed:`, err.message || err);
       return [];
     }
   }
 
-  // Legacy single-task adapter for backward compatibility
   static async extractTask(messageText, roomId, authorName) {
     const tasks = await this.extractTasks(messageText, roomId, authorName);
     return tasks.length > 0 ? tasks[0] : null;
   }
 }
+

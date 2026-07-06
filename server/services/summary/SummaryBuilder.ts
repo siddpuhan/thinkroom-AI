@@ -1,4 +1,4 @@
-import { groq, withRetry } from "../../utils/groqClient.js";
+import { googleAI, withRetry } from "../../utils/geminiClient.js";
 import { logger } from "../../utils/logger.js";
 import { ConversationBuffer } from "../ai/ConversationBuffer.js";
 import { DocumentService } from "../documents/DocumentService.js";
@@ -6,6 +6,11 @@ import { DocumentService } from "../documents/DocumentService.js";
 export class SummaryBuilder {
   static async generateSummary(roomId, summaryType, requestorName) {
     logger.info("SUMMARY_BUILDER", `🚀 Starting summary generation. Type: ${summaryType}, Room: ${roomId}`);
+
+    if (!googleAI) {
+      logger.error("SUMMARY_BUILDER", "Gemini API is not configured.");
+      throw new Error("Gemini API is not configured.");
+    }
 
     const messageWindow = ConversationBuffer.getWindow(roomId);
     if (!messageWindow || messageWindow.length === 0) {
@@ -23,7 +28,7 @@ export class SummaryBuilder {
     if (summaryType === 'meeting') {
       documentCategory = 'Meeting Summary';
       systemPrompt = `You are an expert AI meeting assistant. Generate a comprehensive Meeting Summary based on the provided conversation.
-REQUIRED JSON FORMAT:
+REQUIRED JSON FORMAT (no markdown formatting block):
 {
   "title": "Meeting Summary: [Topic]",
   "content": "A detailed 2-3 paragraph summary of the meeting's main points and conclusions.",
@@ -34,7 +39,7 @@ Focus on: Discussion Topics, Tasks Created, Decisions Made, Risks, Pending Work.
     } else if (summaryType === 'daily') {
       documentCategory = 'Catch Up Summary';
       systemPrompt = `You are an expert AI project manager. Generate a Daily Summary (Today's Work) based on the provided conversation.
-REQUIRED JSON FORMAT:
+REQUIRED JSON FORMAT (no markdown formatting block):
 {
   "title": "Daily Summary: Today's Work",
   "content": "A concise overview of what was accomplished today and what is pending.",
@@ -44,9 +49,8 @@ REQUIRED JSON FORMAT:
 Focus on: Tasks completed, tasks pending, decisions, overall progress.`;
     } else {
       documentCategory = 'Catch Up Summary';
-      // Default to catch_up
       systemPrompt = `You are a helpful AI assistant. Generate a Catch-Up Summary ('While You Were Away') for a user who just joined the room based on the provided conversation.
-REQUIRED JSON FORMAT:
+REQUIRED JSON FORMAT (no markdown formatting block):
 {
   "title": "While You Were Away",
   "content": "A brief summary of what the user missed.",
@@ -57,28 +61,30 @@ Focus on: Messages missed, tasks assigned, decisions finalized, important discus
     }
 
     try {
-      logger.info("SUMMARY_BUILDER", `📡 Calling Groq API...`);
+      logger.info("SUMMARY_BUILDER", `📡 Calling Gemini API (model: gemini-2.5-flash)...`);
       
-      const completion = await withRetry(() => groq.chat.completions.create({
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Conversation:\n${conversationText}` }
-        ],
-        model: "llama-3.3-70b-versatile",
-        temperature: 0.2,
-        max_tokens: 1024,
-        response_format: { type: "json_object" }
+      const model = googleAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        generationConfig: {
+          responseMimeType: "application/json",
+        }
+      });
+
+      const response = await withRetry(() => model.generateContent({
+        contents: [
+          { role: "user", parts: [{ text: `${systemPrompt}\n\nConversation:\n${conversationText}` }] }
+        ]
       }));
 
-      const rawJson = completion.choices[0]?.message?.content;
+      const rawJson = response.response.text();
       if (!rawJson) {
-        throw new Error("Empty response from Groq");
+        throw new Error("Empty response from Gemini");
       }
 
       const parsed = JSON.parse(rawJson);
       
       if (!parsed.title || !parsed.content) {
-        throw new Error("Invalid response format from Groq. Missing title or content.");
+        throw new Error("Invalid response format from Gemini. Missing title or content.");
       }
 
       const contentObj = {
@@ -86,12 +92,10 @@ Focus on: Messages missed, tasks assigned, decisions finalized, important discus
         highlights: parsed.highlights || [],
       };
 
-      // Check if a very recent summary of the same type exists (last 15 mins)
       const recentDoc = await DocumentService.getRecentDocument(roomId, documentCategory);
 
       let savedDocument;
       if (recentDoc) {
-        // Update existing summary
         savedDocument = await DocumentService.update(recentDoc.id, {
           title: parsed.title,
           status: 'final',
@@ -103,7 +107,6 @@ Focus on: Messages missed, tasks assigned, decisions finalized, important discus
         });
         logger.info("SUMMARY_BUILDER", `🔄 Updated existing recent summary ${savedDocument.id}`);
       } else {
-        // Save to database as a new Document
         savedDocument = await DocumentService.create({
           roomId,
           category: documentCategory,
@@ -120,9 +123,10 @@ Focus on: Messages missed, tasks assigned, decisions finalized, important discus
 
       return savedDocument;
 
-    } catch (err) {
+    } catch (err: any) {
       logger.error("SUMMARY_BUILDER", `❌ Summary generation failed: ${err.message}`);
       throw err;
     }
   }
 }
+
