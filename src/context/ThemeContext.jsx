@@ -4,22 +4,25 @@ import React, { createContext, useState, useEffect } from 'react';
 const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setTheme] = useState(() => {
-    // Check for saved theme preference or use system preference
-    const savedTheme = (typeof window !== "undefined" ? localStorage.getItem.bind(localStorage) : () => null)('theme');
-    if (savedTheme) return savedTheme;
-    
-    // Check system preference
-    const prefersDark = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    return prefersDark ? 'dark' : 'light';
-  });
+  const [theme, setTheme] = useState('dark');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Apply theme to document root
+    setMounted(true);
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+      setTheme(savedTheme);
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setTheme(prefersDark ? 'dark' : 'light');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
     document.documentElement.setAttribute('data-theme', theme);
-    // Save preference
     localStorage.setItem('theme', theme);
-  }, [theme]);
+  }, [theme, mounted]);
 
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
