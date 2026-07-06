@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect, useRef, useContext, lazy, Suspense } from 'react';
 import { io } from 'socket.io-client';
-import { useUser, useAuth, UserButton } from '@clerk/nextjs';
+import { useUser, UserButton } from '@clerk/nextjs';
+import { useUser as useAuth0User, getAccessToken } from '@auth0/nextjs-auth0/client';
 import MessageBubble from '../MessageBubble';
 import AnimatedBackground from '../AnimatedBackground';
 import { fetchMessagesApi, sendMessageApi } from '../api/messagesApi';
@@ -18,8 +19,7 @@ const AITaskWorkspace = lazy(() =>
     default: module.AITaskWorkspace,
   }))
 );
-
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://127.0.0.1:5000';
+import { SOCKET_URL, API_BASE_URL } from '../apiConfig';
 
 const generateUUID = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -83,9 +83,11 @@ const StatusBadge = ({ mode }) => {
 
 export default function ChatPage() {
   console.count("[RENDER] ChatPage");
-  const { user } = useUser();
-  const { getToken } = useAuth();
-  const { theme, toggleTheme } = useContext(ThemeContext);
+  const { user: clerkUser } = useUser();
+  const { user: auth0User } = useAuth0User();
+  const user = auth0User || clerkUser;
+  
+const { theme, toggleTheme } = useContext(ThemeContext);
   
   const streamingMessages = useChatStore(state => state.streamingMessages);
   const addStreamStart = useChatStore(state => state.addStreamStart);
@@ -101,17 +103,17 @@ export default function ChatPage() {
     if (user) {
       currentUserIdRef.current = user.id;
       currentUserNameRef.current = 
-        user.fullName || 
+        user.name || 
         user.username || 
-        user.primaryEmailAddress?.emailAddress || 
+        user.email || 
         'Anonymous';
-      currentUserEmailRef.current = user.primaryEmailAddress?.emailAddress || null;
+      currentUserEmailRef.current = user.email || null;
 
       // Sync user to Supabase users table
       const syncUserToDB = async () => {
         try {
-          const token = await getToken();
-          await fetch(`/api/users/sync`, {
+          const token = await getAccessToken().catch(() => null);
+          await fetch(`${API_BASE_URL}/api/users/sync`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -129,7 +131,7 @@ export default function ChatPage() {
       };
        syncUserToDB();
      }
-  }, [user, getToken]);
+  }, [user]);
 
      const [messages, setMessages] = useState([]);
 
@@ -160,7 +162,7 @@ export default function ChatPage() {
         setShowMemoryDebug(prev => !prev);
         if (!showMemoryDebug && activeRoomRef.current) {
           try {
-            const res = await fetch(`/api/memory/${activeRoomRef.current}`);
+            const res = await fetch(`${API_BASE_URL}/api/memory/${activeRoomRef.current}`);
             const data = await res.json();
             if (data.success) {
               setMemoryDebugInfo(data);
@@ -186,10 +188,14 @@ export default function ChatPage() {
 
 
   useEffect(() => {
-    const socket = io(SOCKET_URL);
-    socketRef.current = socket;
+    let socket;
+    const initSocket = async () => {
+      const token = await getAccessToken().catch(() => null);
+      socket = io(SOCKET_URL, { auth: { token } });
+      socketRef.current = socket;
 
-    socket.on('connect', () => {
+      socket.on('connect', () => {
+
       console.log('[SOCKET] Connected:', socket.id);
       setSocketInstance(socket); // expose live socket to child components
       if (activeRoomRef.current) {
@@ -215,14 +221,20 @@ export default function ChatPage() {
       setMessages((prevMessages) => markMessageStatus(prevMessages, clientId, 'delivered'));
     });
 
+    }; // close initSocket
+
+    initSocket();
+
     return () => {
-      socket.off('receive_message');
-      socket.off('message-delivered');
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.disconnect();
-      socketRef.current = null;
-      setSocketInstance(null);
+      if (socketRef.current) {
+        socketRef.current.off('receive_message');
+        socketRef.current.off('message-delivered');
+        socketRef.current.off('connect');
+        socketRef.current.off('disconnect');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+        setSocketInstance(null);
+      }
     };
   }, []);
 
@@ -316,7 +328,7 @@ export default function ChatPage() {
       setLoadingMessages(true);
       setMessageError('');
       try {
-        const token = await getToken();
+        const token = await getAccessToken().catch(() => null);
         const allMessages = await fetchMessagesApi(token, activeRoom);
         setMessages((prev) => mergeMessages(allMessages, prev));
       } catch (error) {
@@ -327,7 +339,7 @@ export default function ChatPage() {
       }
     }
     fetchMessages();
-  }, [activeRoom, getToken]);
+  }, [activeRoom]);
 
   useEffect(() => {
     const syncOfflineMessages = async () => {
@@ -343,7 +355,7 @@ export default function ChatPage() {
       isSyncingOfflineRef.current = true;
       const remainingMessages = [];
 
-      const token = await getToken();
+      const token = await getAccessToken().catch(() => null);
       for (const queuedMessage of queuedMessages) {
         try {
           const savedMessage = await sendMessageApi(
@@ -372,7 +384,7 @@ export default function ChatPage() {
       }
 
       try {
-        const token = await getToken();
+        const token = await getAccessToken().catch(() => null);
         const allMessages = await fetchMessagesApi(token, activeRoomRef.current);
         const pendingMsgs = getOfflineMessages(activeRoomRef.current);
         setMessages((prevMessages) => mergeMessages(allMessages, [...prevMessages, ...pendingMsgs]));
@@ -384,7 +396,7 @@ export default function ChatPage() {
     };
 
     syncOfflineMessages();
-  }, [isOnline, getToken]);
+  }, [isOnline]);
 
   useEffect(() => {
     const el = messageListRef.current;
@@ -424,7 +436,7 @@ export default function ChatPage() {
 
     if (mode === 'server') {
       try {
-        const token = await getToken();
+        const token = await getAccessToken().catch(() => null);
         const savedMessage = await sendMessageApi(
           textToSend,
           currentUserIdRef.current || user?.id,
