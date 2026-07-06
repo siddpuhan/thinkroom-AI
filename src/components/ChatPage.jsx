@@ -91,14 +91,14 @@ const { theme, toggleTheme } = useContext(ThemeContext);
   const appendStreamChunk = useChatStore(state => state.appendStreamChunk);
   const finalizeStream = useChatStore(state => state.finalizeStream);
   
-  const currentUserIdRef = useRef(null);
-  const currentUserId = user?.id;
+  const currentUserId = user?.sub || user?.id;
+  const currentUserIdRef = useRef(currentUserId);
   const currentUserNameRef = useRef('Anonymous');
   const currentUserEmailRef = useRef(null);
 
   useEffect(() => {
     if (user) {
-      currentUserIdRef.current = user.id;
+      currentUserIdRef.current = user.sub || user.id;
       currentUserNameRef.current = 
         user.name || 
         user.username || 
@@ -117,7 +117,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
               'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-              id: user.id,
+              id: user.sub || user.id,
               name: currentUserNameRef.current,
               email: currentUserEmailRef.current
             })
