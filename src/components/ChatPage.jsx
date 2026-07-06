@@ -1,7 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef, useContext, lazy, Suspense } from 'react';
 import { io } from 'socket.io-client';
-import { useUser, UserButton } from '@clerk/nextjs';
 import { useUser as useAuth0User, getAccessToken } from '@auth0/nextjs-auth0/client';
 import MessageBubble from '../MessageBubble';
 import AnimatedBackground from '../AnimatedBackground';
@@ -83,9 +82,7 @@ const StatusBadge = ({ mode }) => {
 
 export default function ChatPage() {
   console.count("[RENDER] ChatPage");
-  const { user: clerkUser } = useUser();
-  const { user: auth0User } = useAuth0User();
-  const user = auth0User || clerkUser;
+  const { user } = useAuth0User();
   
 const { theme, toggleTheme } = useContext(ThemeContext);
   
@@ -539,7 +536,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
          <h1>ThinkRoom AI {activeRoom ? `- Room: ${activeRoom}` : '- Global Chat'}</h1>
          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
            <NetworkStatus queuedCount={queuedCount} />
-           <UserButton afterSignOutUrl="/" />
+           <a href="/api/auth/logout" className="chat-button-subtle" style={{ textDecoration: 'none', color: 'inherit' }} title="Sign Out">Sign Out</a>
            <button 
              onClick={toggleTheme}
              className="chat-button-subtle"

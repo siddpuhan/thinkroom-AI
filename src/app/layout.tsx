@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClerkProvider } from '@clerk/nextjs'
+import { Auth0Provider } from '@auth0/nextjs-auth0/client';
 import { ThemeProvider } from '../context/ThemeContext'
 import './globals.css'
 import '../App.css'
@@ -15,14 +15,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body>
+    <html lang="en">
+      <body>
+        <Auth0Provider>
           <ThemeProvider>
             {children}
           </ThemeProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+        </Auth0Provider>
+      </body>
+    </html>
   )
 }
