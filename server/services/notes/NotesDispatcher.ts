@@ -1,5 +1,5 @@
 import { NotesPrefilter } from './NotesPrefilter.js';
-import { GroqNotesExtraction } from './GroqNotesExtraction.js';
+import { GeminiNotesExtraction } from './GeminiNotesExtraction.js';
 import { NotesService } from './NotesService.js';
 
 export class NotesDispatcher {
@@ -13,7 +13,7 @@ export class NotesDispatcher {
 
     const prefilter = NotesPrefilter.analyze(messageText);
     if (!prefilter.shouldAnalyze) {
-      console.log(`${pipelineId} ⛔ PRE-FILTER: No note signal detected. Skipping Groq.`);
+      console.log(`${pipelineId} ⛔ PRE-FILTER: No note signal detected. Skipping Gemini.`);
       return;
     }
 
@@ -21,14 +21,14 @@ export class NotesDispatcher {
 
     let notes = [];
     try {
-      notes = await GroqNotesExtraction.extractNotes(messageText, roomId, senderName, prefilter.matchedTypes);
-    } catch (err) {
-      console.error(`${pipelineId} ❌ Groq call failed:`, err.message);
+      notes = await GeminiNotesExtraction.extractNotes(messageText, roomId, senderName, prefilter.matchedTypes);
+    } catch (err: any) {
+      console.error(`${pipelineId} ❌ Gemini call failed:`, err.message);
       return;
     }
 
     if (notes.length === 0) {
-      console.log(`${pipelineId} ℹ️ No notes detected by Groq.`);
+      console.log(`${pipelineId} ℹ️ No notes detected by Gemini.`);
       return;
     }
 

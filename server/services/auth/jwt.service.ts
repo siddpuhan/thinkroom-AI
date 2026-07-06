@@ -2,9 +2,13 @@ import { auth } from 'express-oauth2-jwt-bearer';
 import jwt from 'jsonwebtoken';
 import jwksClient from 'jwks-rsa';
 import dotenv from 'dotenv';
-dotenv.config();
 
-const issuerBaseUrl = process.env.AUTH0_ISSUER_BASE_URL;
+// Load server and parent workspace env variables
+dotenv.config({ path: new URL("./.env", import.meta.url) });
+dotenv.config({ path: new URL("../../../.env.local", import.meta.url) });
+dotenv.config({ path: new URL("../../../.env", import.meta.url) });
+
+const issuerBaseUrl = process.env.AUTH0_ISSUER_BASE_URL || (process.env.AUTH0_DOMAIN ? `https://${process.env.AUTH0_DOMAIN}` : undefined);
 const audience = process.env.AUTH0_AUDIENCE;
 
 const hasAuth0Config = !!(issuerBaseUrl && audience);

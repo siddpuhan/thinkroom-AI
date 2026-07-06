@@ -2,20 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
+import { useUser } from '@auth0/nextjs-auth0/client';
 import ChatPage from '../../components/ChatPage'; // Need to separate ChatPage from App.jsx
 
 export default function Chat() {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { user, isLoading } = useUser();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.push('/sign-in'); // Or home page if sign-in is managed there
+    if (!isLoading && !user) {
+      router.push('/auth/login'); // Auth0 default login route
     }
-  }, [isLoaded, isSignedIn, router]);
+  }, [isLoading, user, router]);
 
-  if (!isLoaded || !isSignedIn) {
+  if (isLoading || !user) {
     return null;
   }
 

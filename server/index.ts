@@ -1,7 +1,32 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+
+// Load server and parent workspace env variables
 dotenv.config({ path: new URL("./.env", import.meta.url) });
+dotenv.config({ path: new URL("../.env.local", import.meta.url) });
+dotenv.config({ path: new URL("../.env", import.meta.url) });
+
+const requiredEnv = [
+  'AUTH0_SECRET',
+  'AUTH0_DOMAIN',
+  'AUTH0_CLIENT_ID',
+  'AUTH0_CLIENT_SECRET',
+  'AUTH0_AUDIENCE',
+  'APP_BASE_URL',
+  'DATABASE_URL',
+  'GEMINI_API_KEY'
+];
+
+const missingEnv = requiredEnv.filter(key => !process.env[key]);
+if (missingEnv.length > 0) {
+  console.error("\n❌ CRITICAL STARTUP ERROR: Missing required environment variables:\n");
+  missingEnv.forEach(key => {
+    console.error(`   - ${key}`);
+  });
+  console.error("\nPlease configure these variables in your .env or .env.local files before launching the server.\n");
+  process.exit(1);
+}
 import { createServer } from "http";
 import { Server } from "socket.io";
 
@@ -10,12 +35,12 @@ import messageRoutes from "./routes/messageRoutes.js";
 import resourceRoutes from "./routes/resourceRoutes.js";
 import { syncUser } from "./controllers/userController.js";
 import { detectPersona } from "./ai/router.js";
-import { processPersonaStream } from "./ai/groqService.js";
+import { processPersonaStream } from "./ai/geminiService.js";
 import { PrefilterService } from "./services/ai/PrefilterService.js";
-import { GroqExtraction } from "./services/ai/GroqExtraction.js";
+import { GeminiExtraction } from "./services/ai/GeminiExtraction.js";
 import { TaskService } from "./services/tasks/TaskService.js";
 import { DecisionPrefilter } from "./services/ai/DecisionPrefilter.js";
-import { GroqDecisionExtraction } from "./services/ai/GroqDecisionExtraction.js";
+import { GeminiDecisionExtraction } from "./services/ai/GeminiDecisionExtraction.js";
 import { DocumentService } from "./services/documents/DocumentService.js";
 import { ConversationBuffer } from "./services/ai/ConversationBuffer.js";
 import { NotesDispatcher } from "./services/notes/NotesDispatcher.js";

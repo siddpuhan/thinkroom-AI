@@ -1,6 +1,6 @@
-// PrefilterService.js — Lightweight, zero-cost gate before calling Groq
+// PrefilterService.js — Lightweight, zero-cost gate before calling Gemini
 // Purpose: Decide if a message MIGHT contain an actionable task.
-// Philosophy: High recall (few false negatives), low cost. False positives = just a Groq call.
+// Philosophy: High recall (few false negatives), low cost. False positives = just a Gemini call.
 
 const ACTION_VERBS = new Set([
   // Core assignment verbs

@@ -1,8 +1,9 @@
 import { Server, Socket } from "socket.io";
+import { AuthService } from "../services/auth/auth.service.js";
 import { detectPersona } from "../ai/router.js";
-import { processPersonaStream } from "../ai/groqService.js";
+import { processPersonaStream } from "../ai/geminiService.js";
 import { PrefilterService } from "../services/ai/PrefilterService.js";
-import { GroqExtraction } from "../services/ai/GroqExtraction.js";
+import { GeminiExtraction } from "../services/ai/GeminiExtraction.js";
 import { TaskService } from "../services/tasks/TaskService.js";
 import { DecisionWorkflow } from "../services/decisions/DecisionWorkflow.js";
 import { DocumentService } from "../services/documents/DocumentService.js";
@@ -31,27 +32,27 @@ async function runTaskExtractionPipeline(messageText, roomId, senderName, source
   console.log(`${pipelineId} Text: "${messageText.substring(0, 120)}"`);
   console.log(`${pipelineId} Room: ${roomId} | Sender: ${senderName}`);
 
-  // STEP 1: Pre-filter gate (no Groq call yet)
+  // STEP 1: Pre-filter gate (no Gemini call yet)
   const shouldExtract = PrefilterService.shouldTriggerExtraction(messageText);
   if (!shouldExtract) {
-    console.log(`${pipelineId} ⛔ PRE-FILTER: No task signal detected. Skipping Groq.`);
+    console.log(`${pipelineId} ⛔ PRE-FILTER: No task signal detected. Skipping Gemini.`);
     return;
   }
-  console.log(`${pipelineId} ✅ PRE-FILTER: Task signal detected. Proceeding to Groq.`);
+  console.log(`${pipelineId} ✅ PRE-FILTER: Task signal detected. Proceeding to Gemini.`);
   io.to(roomId).emit("task_generation_status", { status: 'generating' });
 
   try {
-    // STEP 2: Groq extraction
-    console.log(`${pipelineId} 🧠 EXTRACTION: Calling Groq API...`);
+    // STEP 2: Gemini extraction
+    console.log(`${pipelineId} 🧠 EXTRACTION: Calling Gemini API...`);
     let extractedTasks = [];
     try {
-      extractedTasks = await GroqExtraction.extractTasks(messageText, roomId, senderName);
-    } catch (err) {
-      console.error(`${pipelineId} ❌ EXTRACTION: Groq call failed:`, err.message);
+      extractedTasks = await GeminiExtraction.extractTasks(messageText, roomId, senderName);
+    } catch (err: any) {
+      console.error(`${pipelineId} ❌ EXTRACTION: Gemini call failed:`, err.message);
       return;
     }
 
-    console.log(`${pipelineId} 📋 EXTRACTION: Got ${extractedTasks.length} task(s) from Groq`);
+    console.log(`${pipelineId} 📋 EXTRACTION: Got ${extractedTasks.length} task(s) from Gemini`);
 
     if (extractedTasks.length === 0) {
       console.log(`${pipelineId} ℹ️ EXTRACTION: No actionable tasks found. Done.`);
@@ -106,6 +107,20 @@ async function runTaskExtractionPipeline(messageText, roomId, senderName, source
 // ============================================================
 // SOCKET.IO EVENT HANDLERS
 // ============================================================
+
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (!token) {
+      return next(new Error('Authentication error: Missing token'));
+    }
+    const decoded = await AuthService.verifySocketToken(token);
+    (socket as any).user = decoded;
+    next();
+  } catch (err) {
+    next(new Error('Authentication error: Invalid token'));
+  }
+});
 
 io.on("connection", (socket) => {
   console.log(`[SOCKET] 🔌 Client connected: ${socket.id}`);

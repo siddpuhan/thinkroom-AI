@@ -1,6 +1,6 @@
 import { ConversationBuffer } from '../ai/ConversationBuffer.js';
 import { DecisionPrefilter } from '../ai/DecisionPrefilter.js';
-import { GroqDecisionExtraction } from '../ai/GroqDecisionExtraction.js';
+import { GeminiDecisionExtraction } from '../ai/GeminiDecisionExtraction.js';
 import { DocumentService } from '../documents/DocumentService.js';
 
 const FINALIZATION_WINDOW_MS = 18_000;
@@ -111,7 +111,7 @@ export class DecisionWorkflow {
     io.to(roomId).emit('decision_analysis_status', { status: 'analyzing' });
 
     try {
-      const evaluations = await GroqDecisionExtraction.analyzeConversation(window, roomId, matchedPhrases, null);
+      const evaluations = await GeminiDecisionExtraction.analyzeConversation(window, roomId, matchedPhrases, null);
       const evaluation = evaluations[0];
 
       if (!evaluation || evaluation.status === 'rejected') {
@@ -184,7 +184,7 @@ export class DecisionWorkflow {
         confidence: candidate.confidence
       };
 
-      const evaluations = await GroqDecisionExtraction.analyzeConversation(
+      const evaluations = await GeminiDecisionExtraction.analyzeConversation(
         window,
         roomId,
         filterResult.matchedPhrases,

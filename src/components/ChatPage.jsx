@@ -536,7 +536,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
          <h1>ThinkRoom AI {activeRoom ? `- Room: ${activeRoom}` : '- Global Chat'}</h1>
          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
            <NetworkStatus queuedCount={queuedCount} />
-           <a href="/api/auth/logout" className="chat-button-subtle" style={{ textDecoration: 'none', color: 'inherit' }} title="Sign Out">Sign Out</a>
+           <a href="/auth/logout" className="chat-button-subtle" style={{ textDecoration: 'none', color: 'inherit' }} title="Sign Out">Sign Out</a>
            <button 
              onClick={toggleTheme}
              className="chat-button-subtle"

@@ -1,5 +1,5 @@
 // DecisionPrefilter.js — Lightweight gate for the Shadow AI Note-Taker pipeline.
-// Detects basic decision signals in a conversation window, delegating the actual intelligence to Groq.
+// Detects basic decision signals in a conversation window, delegating the actual intelligence to Gemini.
 // Philosophy: Only answer "Should AI analyze this?", not "Was a decision definitely made?".
 
 const DISCUSSION_SIGNALS = [
@@ -57,7 +57,7 @@ export class DecisionPrefilter {
     }
 
     if (matchedPhrases.length > 0) {
-      console.log(`[DECISION PREFILTER] ✅ SIGNAL MATCH: "${matchedPhrases.join(', ')}". Delegating to Groq.`);
+      console.log(`[DECISION PREFILTER] ✅ SIGNAL MATCH: "${matchedPhrases.join(', ')}". Delegating to Gemini.`);
       return { shouldAnalyze: true, matchedPhrases, reason: 'signal detected' };
     }
 
