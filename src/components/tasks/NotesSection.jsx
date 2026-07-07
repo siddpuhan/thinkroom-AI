@@ -135,27 +135,8 @@ export const NotesSection = memo(({ socket, roomId }) => {
   const [typeFilter, setTypeFilter] = useState('all');
 
   useEffect(() => {
-    setNotes([]);
-    if (!socket || !roomId) return;
-
-    socket.emit('get_notes', { roomId }, (notes) => {
-      setNotes(Array.isArray(notes) ? notes : []);
-    });
-
-    const handleCreated = (note) => upsertNote(note);
-    const handleUpdated = (note) => upsertNote(note);
-    const handleDeleted = ({ noteId }) => removeNote(noteId);
-
-    socket.on('note_created', handleCreated);
-    socket.on('note_updated', handleUpdated);
-    socket.on('note_deleted', handleDeleted);
-
-    return () => {
-      socket.off('note_created', handleCreated);
-      socket.off('note_updated', handleUpdated);
-      socket.off('note_deleted', handleDeleted);
-    };
-  }, [socket, roomId, setNotes, upsertNote, removeNote]);
+    // Note list state and socket synchronization are managed by the parent AITaskWorkspace component
+  }, [socket, roomId]);
 
   const notes = useMemo(() => Object.values(notesObj || {}), [notesObj]);
 

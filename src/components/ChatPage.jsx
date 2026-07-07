@@ -134,8 +134,8 @@ const { theme, toggleTheme } = useContext(ThemeContext);
 
      const [loadingMessages, setLoadingMessages] = useState(false);
      const [messageError, setMessageError] = useState('');
-     const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-     const [mode, setMode] = useState(isOnline ? 'server' : 'offline');
+     const [isOnline, setIsOnline] = useState(true);
+     const [mode, setMode] = useState('server');
      const [queuedCount, setQueuedCount] = useState(0);
      const [roomInput, setRoomInput] = useState('');
      const [activeRoom, setActiveRoom] = useState('');
@@ -236,6 +236,8 @@ const { theme, toggleTheme } = useContext(ThemeContext);
   }, []);
 
   useEffect(() => {
+    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    
     const goOnline = () => {
       setIsOnline(true);
     };
@@ -272,9 +274,9 @@ const { theme, toggleTheme } = useContext(ThemeContext);
   }, [activeRoom, messages, isOnline]);
 
   useEffect(() => {
-    if (!activeRoom || !socketRef.current) return;
+    if (!activeRoom || !socketInstance) return;
     
-    const socket = socketRef.current;
+    const socket = socketInstance;
     const handler = (msg) => {
       if (msg.room_id !== activeRoom && msg.roomId !== activeRoom && msg.room !== activeRoom) return;
       
@@ -316,7 +318,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       socket.off("ai_stream_chunk", handleStreamChunk);
       socket.off("ai_stream_end", handleStreamEnd);
     };
-  }, [activeRoom, addStreamStart, appendStreamChunk, finalizeStream]);
+  }, [activeRoom, socketInstance, addStreamStart, appendStreamChunk, finalizeStream]);
 
   useEffect(() => {
     async function fetchMessages() {

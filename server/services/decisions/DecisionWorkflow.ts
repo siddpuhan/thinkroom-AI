@@ -60,11 +60,17 @@ export class DecisionWorkflow {
   }
 
   static async loadActiveCandidate(roomId) {
-    // We match the topic by finding the latest draft Decision
-    return DocumentService.findDraftForTopic(roomId, 'Decision');
+    // We match the topic by finding the latest draft candidate regardless of category
+    const categories = ['Decision', 'Requirements', 'Architecture', 'Meeting Summary'];
+    for (const cat of categories) {
+      const draft = await DocumentService.findDraftForTopic(roomId, cat);
+      if (draft) return draft;
+    }
+    return null;
   }
 
   static async observeMessage({ roomId, message, io }) {
+    console.log(`[PIPELINE:LOG] DOCUMENT_EXTRACTION_STARTED | Room: ${roomId}`);
     const state = ensureState(roomId);
     state.lastActivityAt = Date.now();
 
@@ -83,12 +89,13 @@ export class DecisionWorkflow {
       
       const filterResult = DecisionPrefilter.analyze(window);
       if (!filterResult.shouldAnalyze) {
+        console.log(`[PIPELINE:LOG] DOCUMENT_EXTRACTION_COMPLETED | Room: ${roomId} | Status: Skipped (pre-filter)`);
         return;
       }
 
       state.isAnalyzing = true;
       try {
-        await this.createCandidate(roomId, io, window, filterResult.matchedPhrases);
+        await this.createCandidate(roomId, io, window, filterResult.matchedPhrases, filterResult.category);
       } finally {
         state.isAnalyzing = false;
       }
@@ -107,7 +114,7 @@ export class DecisionWorkflow {
     }
   }
 
-  static async createCandidate(roomId, io, window, matchedPhrases = []) {
+  static async createCandidate(roomId, io, window, matchedPhrases = [], prefilterCategory = 'Decision') {
     io.to(roomId).emit('decision_analysis_status', { status: 'analyzing' });
 
     try {
@@ -116,6 +123,7 @@ export class DecisionWorkflow {
 
       if (!evaluation || evaluation.status === 'rejected') {
         io.to(roomId).emit('decision_analysis_status', { status: 'idle' });
+        console.log(`[PIPELINE:LOG] DOCUMENT_EXTRACTION_COMPLETED | Room: ${roomId} | Status: Rejected by Gemini`);
         return;
       }
 
@@ -126,9 +134,11 @@ export class DecisionWorkflow {
         alternativesDiscussed: evaluation.alternativesDiscussed || [],
       };
 
+      const docCategory = evaluation.category || prefilterCategory;
+
       const created = await DocumentService.create({
         roomId,
-        category: 'Decision',
+        category: docCategory,
         title: evaluation.title,
         status: 'draft',
         summary: evaluation.discussionSummary || '',
@@ -142,8 +152,9 @@ export class DecisionWorkflow {
       state.candidate = { ...created, messagesSinceCandidate: 0 };
       state.messagesSinceCandidate = 0;
 
+      console.log(`[PIPELINE:LOG] DOCUMENT_SAVED | ID: ${created.id} | Room: ${roomId} | Category: ${docCategory} | Title: "${created.title}"`);
       io.to(roomId).emit('document_created', created);
-      console.log(`[DECISION WORKFLOW] ✅ Draft Decision created: ${created.title}`);
+      console.log(`[PIPELINE:LOG] DOCUMENT_EMITTED | ID: ${created.id} | Room: ${roomId}`);
     } finally {
       io.to(roomId).emit('decision_analysis_status', { status: 'idle' });
     }
@@ -258,7 +269,9 @@ export class DecisionWorkflow {
     state.messagesSinceCandidate = 0;
     clearTimer(state);
 
+    console.log(`[PIPELINE:LOG] DOCUMENT_FINALIZED | ID: ${finalizedDocument.id} | Room: ${roomId}`);
     io.to(roomId).emit('document_updated', finalizedDocument);
+    console.log(`[PIPELINE:LOG] DOCUMENT_EMITTED | ID: ${finalizedDocument.id} | Room: ${roomId}`);
     io.to(roomId).emit('decision_analysis_status', { status: 'idle' });
   }
 

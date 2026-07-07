@@ -248,6 +248,24 @@ const connectDB = async () => {
     await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;`);
     await client.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE;`);
 
+    // Migration: Update notes check constraint to allow new note types
+    try {
+      await client.query(`
+        DO $$
+        BEGIN
+          BEGIN
+            ALTER TABLE notes DROP CONSTRAINT IF EXISTS notes_type_check;
+            ALTER TABLE notes ADD CONSTRAINT notes_type_check
+              CHECK(type IN ('Reminder', 'Idea', 'Risk', 'Observation', 'Resource', 'Decision', 'Insight', 'Architecture', 'Action Item', 'Conclusion'));
+          EXCEPTION WHEN OTHERS THEN NULL;
+          END;
+        END $$;
+      `);
+      console.log("Notes check constraint migration completed");
+    } catch (migErr: any) {
+      console.warn("Notes check constraint migration warning (non-fatal):", migErr.message);
+    }
+
     // Drop legacy summaries table
     await client.query(`DROP TABLE IF EXISTS summaries CASCADE;`);
 

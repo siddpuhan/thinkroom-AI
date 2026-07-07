@@ -1,7 +1,10 @@
 import { googleAI, withRetry } from '../../utils/geminiClient.js';
 import { logger } from '../../utils/logger.js';
 
-const ALLOWED_TYPES = new Set(['Reminder', 'Idea', 'Risk', 'Observation', 'Resource']);
+const ALLOWED_TYPES = new Set([
+  'Reminder', 'Idea', 'Risk', 'Observation', 'Resource',
+  'Decision', 'Insight', 'Architecture', 'Action Item', 'Conclusion'
+]);
 const MIN_CONFIDENCE = 0.65;
 
 function normalizeType(type) {
@@ -33,47 +36,47 @@ export class GeminiNotesExtraction {
       return [];
     }
 
-    const systemPrompt = `You are a production-grade AI notes engine embedded in a collaboration workspace.
-
-Your job is to extract concise, durable knowledge from a single message.
+    const systemPrompt = `You are a staff-level technical coordinator and project manager note-taking engine.
+Your job is to identify note-worthy information from a message and categorize it accurately.
 
 SUPPORTED NOTE TYPES:
-- Reminder: a future action, follow-up, or time-based prompt
-- Idea: a suggestion, feature, or speculative improvement
-- Risk: a problem, issue, concern, security risk, or bug
-- Observation: a useful factual observation or inference
-- Resource: a helpful link, article, docs reference, tutorial, or repository
+- Reminder: a future action, follow-up, or time-based reminder (e.g. "remind me to deploy")
+- Idea: a recommendation, future proposal, brainstorm, or speculative improvement
+- Risk: a problem, potential issue, security concern, bug, or dangerous concern
+- Observation: a fact-based observation, learning, or descriptive finding
+- Resource: a reference link, documentation, tutorial, or repository URL
+- Decision: a finalized choice, architecture decision, or group consensus
+- Insight: a technical discovery, performance observation, or coding tip
+- Architecture: database layout, component structure, pipeline flow, or design model notes
+- Action Item: an explicit todo or task assignment
+- Conclusion: a finalized resolution of a bug or problem
 
-RULES:
-1. Return ONLY strict JSON.
-2. Return an empty array if the message is not note-worthy.
-3. Create one note per distinct idea when appropriate.
-4. Use the matched types as hints, but do not force notes that are not supported by the message.
-5. Keep titles short and specific.
-6. Keep content useful and slightly more descriptive than the title.
-7. Confidence must be between 0.0 and 1.0.
+EXTRACTION RULES:
+1. semantic understanding: Evaluate the message like an experienced project manager. Do not expect rigid command formats; understand natural human context.
+2. Return strictly parsed JSON matching the format below. No markdown blocks. No explanations.
+3. If not note-worthy, return {"notes": []}
 
-REQUIRED OUTPUT FORMAT (strict JSON, no markdown formatting block):
+JSON FORMAT:
 {
   "notes": [
     {
-      "type": "Reminder",
-      "title": "Ask Professor",
-      "content": "Ask professor tomorrow",
-      "confidence": 0.94
+      "type": "Reminder" | "Idea" | "Risk" | "Observation" | "Resource" | "Decision" | "Insight" | "Architecture" | "Action Item" | "Conclusion",
+      "title": "Short title (under 6 words)",
+      "content": "Full description of the note with necessary details",
+      "confidence": 0.85
     }
   ]
 }
 
 EXAMPLES:
-Message: "Remind me tomorrow to call the clinic"
-→ {"notes":[{"type":"Reminder","title":"Call the clinic","content":"Call the clinic tomorrow","confidence":0.96}]}
+Message: "Let's use PostgreSQL for our database schema to get ACID transactions."
+→ {"notes":[{"type":"Architecture","title":"PostgreSQL Database Schema","content":"Migrate primary database to PostgreSQL to ensure ACID transactions for data integrity.","confidence":0.95}]}
 
-Message: "What if we add voice support?"
-→ {"notes":[{"type":"Idea","title":"Add voice support","content":"Consider adding voice input and voice UX support.","confidence":0.91}]}
+Message: "Authentication works now, I fixed the cookie middleware."
+→ {"notes":[{"type":"Conclusion","title":"Auth Cookie Fix","content":"Fixed the Auth0 cookie middleware to resolve session hydration errors.","confidence":0.93}]}
 
-Message: "Authentication may be risky."
-→ {"notes":[{"type":"Risk","title":"Authentication risk","content":"Authentication may introduce implementation or security risk.","confidence":0.93}]}
+Message: "Our architecture will use Next.js, Express, PostgreSQL and Socket.IO"
+→ {"notes":[{"type":"Architecture","title":"ThinkRoom Tech Stack","content":"Core tech stack agreed on: Next.js frontend, Express backend, PostgreSQL database, and Socket.IO for realtime synchronization.","confidence":0.97}]}
 
 Message: "React docs explain this."
 → {"notes":[{"type":"Resource","title":"React documentation","content":"React docs explain the approach or behavior.","confidence":0.87}]}

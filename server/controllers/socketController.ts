@@ -1,4 +1,5 @@
 import { Server, Socket } from "socket.io";
+import { getDB } from "../config/db.js";
 import { AuthService } from "../services/auth/auth.service.js";
 import { detectPersona } from "../ai/router.js";
 import { processPersonaStream } from "../ai/geminiService.js";
@@ -27,42 +28,46 @@ export const setupSocket = (io: Server) => {
 async function runTaskExtractionPipeline(messageText, roomId, senderName, sourceMessageId) {
   const pipelineId = `[PIPELINE:${Date.now().toString(36)}]`;
   
-  console.log(`${pipelineId} ─────────────────────────────────────`);
-  console.log(`${pipelineId} 📥 MESSAGE RECEIVED for extraction`);
-  console.log(`${pipelineId} Text: "${messageText.substring(0, 120)}"`);
-  console.log(`${pipelineId} Room: ${roomId} | Sender: ${senderName}`);
-
+  console.log(`[PIPELINE:LOG] TASK_EXTRACTION_STARTED | MessageId: ${sourceMessageId} | Room: ${roomId}`);
+  
   // STEP 1: Pre-filter gate (no Gemini call yet)
   const shouldExtract = PrefilterService.shouldTriggerExtraction(messageText);
   if (!shouldExtract) {
-    console.log(`${pipelineId} ⛔ PRE-FILTER: No task signal detected. Skipping Gemini.`);
+    console.log(`[PIPELINE:LOG] TASK_EXTRACTION_COMPLETED | MessageId: ${sourceMessageId} | Status: Skipped (pre-filter)`);
     return;
   }
-  console.log(`${pipelineId} ✅ PRE-FILTER: Task signal detected. Proceeding to Gemini.`);
   io.to(roomId).emit("task_generation_status", { status: 'generating' });
+
+  // Load rolling conversation history
+  let history = [];
+  try {
+    const pool = getDB();
+    const historyResult = await pool.query(
+      `SELECT text, sender_name, created_at FROM messages WHERE room_id = $1 ORDER BY created_at DESC LIMIT 20`,
+      [roomId]
+    );
+    history = historyResult.rows.reverse();
+  } catch (err: any) {
+    console.error(`[PIPELINE:LOG] TASK_EXTRACTION_HISTORY_FAILED | Room: ${roomId} | Error: ${err.message}`);
+  }
 
   try {
     // STEP 2: Gemini extraction
-    console.log(`${pipelineId} 🧠 EXTRACTION: Calling Gemini API...`);
     let extractedTasks = [];
-    try {
-      extractedTasks = await GeminiExtraction.extractTasks(messageText, roomId, senderName);
-    } catch (err: any) {
-      console.error(`${pipelineId} ❌ EXTRACTION: Gemini call failed:`, err.message);
+  try {
+    extractedTasks = await GeminiExtraction.extractTasks(messageText, roomId, senderName, history);
+  } catch (err: any) {
+      console.error(`[PIPELINE:LOG] TASK_EXTRACTION_FAILED | MessageId: ${sourceMessageId} | Error: ${err.message}`);
       return;
     }
 
-    console.log(`${pipelineId} 📋 EXTRACTION: Got ${extractedTasks.length} task(s) from Gemini`);
-
     if (extractedTasks.length === 0) {
-      console.log(`${pipelineId} ℹ️ EXTRACTION: No actionable tasks found. Done.`);
+      console.log(`[PIPELINE:LOG] TASK_EXTRACTION_COMPLETED | MessageId: ${sourceMessageId} | Status: No tasks found`);
       return;
     }
 
     // STEP 3: Persist each task and emit socket events
     for (const taskData of extractedTasks) {
-      console.log(`${pipelineId} 💾 DB INSERT: "${taskData.title}" | assigned: ${taskData.assigned_to} | priority: ${taskData.priority} | confidence: ${taskData.confidence}`);
-      
       try {
         const newTask = await TaskService.create({
           roomId,
@@ -78,21 +83,18 @@ async function runTaskExtractionPipeline(messageText, roomId, senderName, source
           createdBy: 'AI_SYSTEM'
         });
 
-        console.log(`${pipelineId} ✅ DB INSERT SUCCESS: Task id=${newTask.id}`);
+        console.log(`[PIPELINE:LOG] TASK_SAVED | ID: ${newTask.id} | Room: ${roomId} | Title: "${newTask.title}"`);
 
         // STEP 4: Emit task_created to all room members
-        console.log(`${pipelineId} 📡 SOCKET EMIT: task_created → room "${roomId}"`);
         io.to(roomId).emit("task_created", {
           ...newTask,
           assignedToName: newTask.assigned_to_name || null,
         });
+        console.log(`[PIPELINE:LOG] TASK_EMITTED | ID: ${newTask.id} | Room: ${roomId}`);
         MemoryService.triggerBackgroundRebuild(roomId);
-        console.log(`${pipelineId} ✅ SOCKET EMIT: task_created sent successfully`);
 
-      } catch (dbErr) {
-        console.error(`${pipelineId} ❌ DB INSERT FAILED for task "${taskData.title}":`, dbErr.message);
-        if (dbErr.code) console.error(`${pipelineId} Error code: ${dbErr.code}`);
-        if (dbErr.detail) console.error(`${pipelineId} Error detail: ${dbErr.detail}`);
+      } catch (dbErr: any) {
+        console.error(`[PIPELINE:LOG] TASK_SAVE_FAILED | Room: ${roomId} | Error: ${dbErr.message}`);
       }
     }
   } finally {
@@ -139,11 +141,12 @@ io.on("connection", (socket) => {
 
   // ─── Message Handling ──────────────────────────────────────
   socket.on("send_message", ({ roomId, message }) => {
-    console.log(`[SOCKET] 💬 Message received in room "${roomId}" from ${message?.sender_name}`);
+    console.log(`[PIPELINE:LOG] MESSAGE_RECEIVED | ID: ${message?.id} | Room: ${roomId} | Sender: ${message?.sender_name}`);
     
     // 1. Immediately broadcast to room (chat rendering)
     io.to(roomId).emit("receive_message", message);
-    console.log(`[SOCKET] 📤 Message broadcast to room`);
+    io.to(roomId).emit("message_created", message);
+    console.log(`[PIPELINE:LOG] MESSAGE_EMITTED | ID: ${message?.id} | Room: ${roomId} | Broadcast complete`);
 
     const messageText = (message.text || message.content || '').trim();
     if (!messageText) return;

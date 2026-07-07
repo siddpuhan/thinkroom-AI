@@ -1,0 +1,254 @@
+{
+  "testCases": [
+    {
+      "id": 1,
+      "text": "Anshika please prepare DSA notes for tomorrow.",
+      "expected": "Task generated, assigned to Anshika, deadline tomorrow"
+    },
+    {
+      "id": 2,
+      "text": "Rahul deploy backend today.",
+      "expected": "Task generated, assigned to Rahul, deadline today"
+    },
+    {
+      "id": 3,
+      "text": "Finish landing page before Monday.",
+      "expected": "Task generated, deadline Monday"
+    },
+    {
+      "id": 4,
+      "text": "Review my PR.",
+      "expected": "Task generated"
+    },
+    {
+      "id": 5,
+      "text": "Call the client tomorrow.",
+      "expected": "Task generated, deadline tomorrow"
+    },
+    {
+      "id": 6,
+      "text": "We've decided to migrate to Gemini.",
+      "expected": "Decision / Document candidate created"
+    },
+    {
+      "id": 7,
+      "text": "Our architecture will use Next.js, Express, PostgreSQL and Socket.IO.",
+      "expected": "Architecture note / Architecture document created"
+    },
+    {
+      "id": 8,
+      "text": "Please schedule a meeting for Friday.",
+      "expected": "Task generated, deadline Friday"
+    },
+    {
+      "id": 9,
+      "text": "Remember to update README.",
+      "expected": "Reminder note / Task generated"
+    },
+    {
+      "id": 10,
+      "text": "Let's use Gemini instead of Groq.",
+      "expected": "Decision / Document candidate created"
+    },
+    {
+      "id": 11,
+      "text": "I'll finish authentication tomorrow.",
+      "expected": "Task generated (commitment)"
+    },
+    {
+      "id": 12,
+      "text": "Anshika can you write the unit tests today?",
+      "expected": "Task generated, assigned to Anshika"
+    },
+    {
+      "id": 13,
+      "text": "We should use Tailwind CSS for styling.",
+      "expected": "Idea note / Decision candidate"
+    },
+    {
+      "id": 14,
+      "text": "I will handle the frontend integration.",
+      "expected": "Task generated (promise/commitment)"
+    },
+    {
+      "id": 15,
+      "text": "Make sure to backup the database before migration.",
+      "expected": "Task generated / Risk note"
+    },
+    {
+      "id": 16,
+      "text": "Let's meet at 2 PM today to discuss design.",
+      "expected": "Task generated, deadline today at 2 PM"
+    },
+    {
+      "id": 17,
+      "text": "Don't forget to push the code to main.",
+      "expected": "Reminder note / Task generated"
+    },
+    {
+      "id": 18,
+      "text": "Can someone look into the memory leak issue?",
+      "expected": "Task generated / Risk note"
+    },
+    {
+      "id": 19,
+      "text": "We will deploy to Vercel.",
+      "expected": "Decision note / Task generated"
+    },
+    {
+      "id": 20,
+      "text": "Please review the PR before end of day.",
+      "expected": "Task generated, priority high"
+    },
+    {
+      "id": 21,
+      "text": "We need to fix the session cookie bug asap.",
+      "expected": "Task generated, priority urgent"
+    },
+    {
+      "id": 22,
+      "text": "Let's proceed with Auth0 instead of Clerk.",
+      "expected": "Decision note / Document candidate"
+    },
+    {
+      "id": 23,
+      "text": "I'm going to set up the Socket.IO rooms.",
+      "expected": "Task generated (commitment)"
+    },
+    {
+      "id": 24,
+      "text": "Anshika, coordinate the team sync tomorrow.",
+      "expected": "Task generated, assigned to Anshika"
+    },
+    {
+      "id": 25,
+      "text": "We should create a custom hook for online status.",
+      "expected": "Idea note / Task generated"
+    },
+    {
+      "id": 26,
+      "text": "Rahul, please update the package dependencies.",
+      "expected": "Task generated, assigned to Rahul"
+    },
+    {
+      "id": 27,
+      "text": "Let's document the API schema in a Requirements Document.",
+      "expected": "Document candidate created"
+    },
+    {
+      "id": 28,
+      "text": "The API endpoint has a high latency issue.",
+      "expected": "Risk note"
+    },
+    {
+      "id": 29,
+      "text": "We decided to set the session timeout to 24 hours.",
+      "expected": "Decision note / Document candidate"
+    },
+    {
+      "id": 30,
+      "text": "I'll create the PostgreSQL migration script.",
+      "expected": "Task generated (commitment)"
+    },
+    {
+      "id": 31,
+      "text": "Review the database schema by tomorrow.",
+      "expected": "Task generated, deadline tomorrow"
+    },
+    {
+      "id": 32,
+      "text": "We must verify Auth0 scopes on server side.",
+      "expected": "Task generated / Architecture note"
+    },
+    {
+      "id": 33,
+      "text": "I will update the README before Monday.",
+      "expected": "Task generated, deadline Monday"
+    },
+    {
+      "id": 34,
+      "text": "Let's use Redis for caching socket session IDs.",
+      "expected": "Idea / Architecture note"
+    },
+    {
+      "id": 35,
+      "text": "Anshika can you look into Auth0 universal login customization?",
+      "expected": "Task generated, assigned to Anshika"
+    },
+    {
+      "id": 36,
+      "text": "We should add ESLint rules for TypeScript imports.",
+      "expected": "Idea / Task generated"
+    },
+    {
+      "id": 37,
+      "text": "The server-side proxy causes double login prompts.",
+      "expected": "Risk note"
+    },
+    {
+      "id": 38,
+      "text": "We've resolved the hydration mismatch in the chat component.",
+      "expected": "Conclusion note"
+    },
+    {
+      "id": 39,
+      "text": "Rahul please check the database connection leak.",
+      "expected": "Task generated, assigned to Rahul"
+    },
+    {
+      "id": 40,
+      "text": "I'll prepare the release notes tonight.",
+      "expected": "Task generated (commitment), deadline tonight"
+    },
+    {
+      "id": 41,
+      "text": "Let's generate the database schema design document.",
+      "expected": "Architecture document generated"
+    },
+    {
+      "id": 42,
+      "text": "We should use React Query for API state management.",
+      "expected": "Idea / Decision candidate"
+    },
+    {
+      "id": 43,
+      "text": "I will migrate the workspace store to Zustand today.",
+      "expected": "Task generated, deadline today"
+    },
+    {
+      "id": 44,
+      "text": "The frontend assets must load under 1.5 seconds.",
+      "expected": "Requirements / Observation note"
+    },
+    {
+      "id": 45,
+      "text": "Anshika, deploy the staging branch to Vercel.",
+      "expected": "Task generated, assigned to Anshika"
+    },
+    {
+      "id": 46,
+      "text": "Our API keys should be rotated weekly.",
+      "expected": "Risk / Security note"
+    },
+    {
+      "id": 47,
+      "text": "We finalized the architecture using Next.js App Router.",
+      "expected": "Decision note / Architecture document"
+    },
+    {
+      "id": 48,
+      "text": "Please write the user story for chat attachments.",
+      "expected": "Task generated / Requirements note"
+    },
+    {
+      "id": 49,
+      "text": "We need to fix the CSS layout bug in Safari.",
+      "expected": "Task generated, priority medium"
+    },
+    {
+      "id": 50,
+      "text": "I'll set up the GitHub Actions workflow tonight.",
+      "expected": "Task generated (commitment), deadline tonight"
+    }
+  ]
+}

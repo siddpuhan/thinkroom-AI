@@ -11,7 +11,8 @@ export default function Chat() {
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.push('/auth/login'); // Auth0 default login route
+      const returnTo = typeof window !== 'undefined' ? window.location.pathname : '/chat';
+      router.push(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
     }
   }, [isLoading, user, router]);
 

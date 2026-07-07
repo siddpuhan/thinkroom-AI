@@ -1,7 +1,5 @@
 // GeminiExtraction.ts — AI Task Extraction Pipeline
-// Responsibility: Given a message, extract structured task JSON via Gemini LLM.
-// IMPORTANT: assigned_to stores a display NAME string (not a user FK id).
-// This avoids PostgreSQL foreign key violations entirely.
+// Responsibility: Given a message and conversation history, extract tasks.
 
 import { googleAI, withRetry } from "../../utils/geminiClient.js";
 import dotenv from "dotenv";
@@ -10,17 +8,15 @@ import { logger } from "../../utils/logger.js";
 
 dotenv.config();
 
-// Minimum confidence for a task to be accepted
-const CONFIDENCE_THRESHOLD = 0.6;
+const CONFIDENCE_THRESHOLD = 0.5;
 
 export class GeminiExtraction {
   /**
-   * Extract one or more structured tasks from a message.
-   * Returns an array of task objects, or empty array if none detected.
+   * Extract one or more structured tasks from a message, leveraging rolling conversation context.
    */
-  static async extractTasks(messageText, roomId, authorName) {
-    console.log(`[GEMINI EXTRACTION] 🚀 Starting task extraction for message: "${messageText.substring(0, 100)}"`);
-    console.log(`[GEMINI EXTRACTION] Room: ${roomId}, Author: ${authorName}`);
+  static async extractTasks(messageText, roomId, authorName, history = []) {
+    console.log(`[GEMINI EXTRACTION] 🚀 Starting semantic task extraction for message: "${messageText.substring(0, 100)}"`);
+    console.log(`[GEMINI EXTRACTION] Room: ${roomId}, Author: ${authorName}, Context history length: ${history.length}`);
 
     if (!googleAI) {
       console.error("[GEMINI EXTRACTION] ❌ Gemini API is not configured.");
@@ -29,7 +25,7 @@ export class GeminiExtraction {
 
     const pool = getDB();
 
-    // Fetch recent message authors in this room for name-matching context
+    // Fetch recent message authors for name matching
     let roomMembers = [];
     try {
       const membersResult = await pool.query(
@@ -37,54 +33,50 @@ export class GeminiExtraction {
         [roomId]
       );
       roomMembers = membersResult.rows.map(r => r.sender_name).filter(Boolean);
-      console.log(`[GEMINI EXTRACTION] Room members for context: ${JSON.stringify(roomMembers)}`);
     } catch (e: any) {
       console.error("[GEMINI EXTRACTION] ⚠️ Could not fetch room members:", e.message);
     }
 
-    const systemPrompt = `You are an expert project management AI assistant specialized in extracting actionable tasks from conversational messages.
+    const conversationContext = history
+      .map((msg, i) => `[${i + 1}] ${msg.sender_name || 'Unknown'}: "${msg.text || ''}"`)
+      .join('\n');
 
-Your role is to analyze messages and identify tasks, assignments, and action items.
+    const systemPrompt = `You are a staff-level technical project manager and coordinator.
+Your objective is to analyze a conversation window and identify tasks, assignments, commitments, promises, deadlines, follow-ups, and requests.
 
-CONTEXT:
-- Current Time: ${new Date().toISOString()}
-- Room Members (people who have sent messages): ${JSON.stringify(roomMembers)}
-- Message Author: ${authorName}
+CONVERSATION CONTEXT (Last 20 messages):
+${conversationContext}
 
-EXTRACTION RULES:
-1. Extract ALL distinct tasks mentioned in the message, even if multiple exist.
-2. For "assigned_to": Match names mentioned in the message against Room Members. Use the EXACT display name string from Room Members if it matches. If no match found, use the name as written in the message. If unclear, use null.
-3. Priority MUST be exactly one of: "low", "medium", "high", or "urgent".
-4. If a deadline is mentioned (e.g., "by Friday", "by tomorrow"), estimate the ISO8601 datetime. Today is ${new Date().toISOString().split('T')[0]}.
-5. "confidence" is a float 0.0–1.0. 0.9+ = very clear task. 0.7 = likely task. 0.5 = possible task.
-6. If the message contains NO actionable tasks, return: {"tasks": []}
+LATEST MESSAGE TO EVALUATE:
+Author: ${authorName}
+Message: "${messageText}"
 
-REQUIRED OUTPUT FORMAT (strict JSON, no markdown formatting block, no explanations):
+ROOM MEMBERS (known names):
+${JSON.stringify(roomMembers)}
+
+EXTRACTION GUIDELINES:
+1. semantic understanding: A task should be created whenever the message or conversation indicates actionable work, an assignment, a reminder, a promise, a commitment, a deadline, a responsibility, a follow-up, a request, or an action item.
+2. Context matching: Use the conversation context to resolve who tasks are assigned to, or what the task refers to. For example, if User A says "We should redesign the landing page" and User B says "Anshika can you handle it?", you should resolve this to a task "Redesign landing page" assigned to "Anshika".
+3. Assignee name: Match the assignee name against the Room Members list if possible. If not found, use the name as written. If no one is assigned, use null.
+4. Priority: Must be exactly one of: "low", "medium", "high", or "urgent".
+5. Deadline: Estimate the ISO8601 datetime if a timeline is mentioned (e.g. "tomorrow", "Friday"). Today is ${new Date().toISOString().split('T')[0]}.
+6. Confidence: A float between 0.0 and 1.0. Set at least 0.6 for any clear action item.
+
+RETURN ONLY STRICT JSON IN THIS FORMAT (no markdown code blocks, no trailing comments, no explanation):
 {
   "tasks": [
     {
-      "title": "Short, clear action title",
-      "description": "Additional context from the message, or empty string",
-      "assigned_to": "Display name string or null",
-      "priority": "medium",
+      "title": "Clear action title",
+      "description": "Any additional context, requirements, or conversation snippet",
+      "assigned_to": "Exact string name of assignee or null",
+      "priority": "low" | "medium" | "high" | "urgent",
       "deadline": "ISO8601 string or null",
       "confidence": 0.85
     }
   ]
 }
 
-EXAMPLES:
-Message: "Siddharth prepare the excel sheet"
-→ {"tasks": [{"title": "Prepare the excel sheet", "description": "", "assigned_to": "Siddharth", "priority": "medium", "deadline": null, "confidence": 0.88}]}
-
-Message: "Assign Siddharth to complete authentication by Friday"
-→ {"tasks": [{"title": "Complete authentication", "description": "", "assigned_to": "Siddharth", "priority": "high", "deadline": "2026-07-10T12:00:00Z", "confidence": 0.95}]}
-
-Message: "We need to attend the meeting, prepare the slides, and buy the new equipment"
-→ {"tasks": [{"title": "Attend the meeting", ...}, {"title": "Prepare the slides", ...}, {"title": "Buy the new equipment", ...}]}
-
-Message: "How are you doing today?"
-→ {"tasks": []}`;
+If no task or action item exists, return: {"tasks": []}`;
 
     try {
       logger.info("GEMINI-EXTRACTION", `📡 Calling Gemini API (model: gemini-2.5-flash)...`);
@@ -98,7 +90,7 @@ Message: "How are you doing today?"
 
       const response = await withRetry(() => model.generateContent({
         contents: [
-          { role: "user", parts: [{ text: `${systemPrompt}\n\nExtract tasks from this message: "${messageText}"` }] }
+          { role: "user", parts: [{ text: systemPrompt }] }
         ]
       }));
 
@@ -115,7 +107,6 @@ Message: "How are you doing today?"
         parsed = JSON.parse(rawJson);
       } catch (parseErr: any) {
         console.error("[GEMINI EXTRACTION] ❌ JSON parse failed:", parseErr.message);
-        console.error("[GEMINI EXTRACTION] Raw content was:", rawJson);
         return [];
       }
 
@@ -125,13 +116,11 @@ Message: "How are you doing today?"
       } else if (parsed.title) {
         tasks = [parsed];
       } else {
-        console.log("[GEMINI EXTRACTION] ℹ️ No tasks in response");
         return [];
       }
 
       const validTasks = tasks.filter(task => {
         if (!task.title || typeof task.title !== 'string' || task.title.trim() === '') {
-          console.log(`[GEMINI EXTRACTION] ⚠️ Skipping task with no title`);
           return false;
         }
         const confidence = parseFloat(task.confidence) || 0;
@@ -142,8 +131,6 @@ Message: "How are you doing today?"
         return true;
       });
 
-      console.log(`[GEMINI EXTRACTION] ✅ Extracted ${validTasks.length} valid task(s) from ${tasks.length} detected`);
-      
       return validTasks.map(task => ({
         title: task.title.trim(),
         description: task.description || '',
@@ -160,7 +147,7 @@ Message: "How are you doing today?"
   }
 
   static async extractTask(messageText, roomId, authorName) {
-    const tasks = await this.extractTasks(messageText, roomId, authorName);
+    const tasks = await this.extractTasks(messageText, roomId, authorName, []);
     return tasks.length > 0 ? tasks[0] : null;
   }
 }

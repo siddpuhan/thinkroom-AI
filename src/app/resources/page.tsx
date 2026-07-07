@@ -11,7 +11,8 @@ export default function Resources() {
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.push('/auth/login');
+      const returnTo = typeof window !== 'undefined' ? window.location.pathname : '/resources';
+      router.push(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
     }
   }, [isLoading, user, router]);
 

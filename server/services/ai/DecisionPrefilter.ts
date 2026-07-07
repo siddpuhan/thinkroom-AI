@@ -1,67 +1,33 @@
 // DecisionPrefilter.js — Lightweight gate for the Shadow AI Note-Taker pipeline.
-// Detects basic decision signals in a conversation window, delegating the actual intelligence to Gemini.
-// Philosophy: Only answer "Should AI analyze this?", not "Was a decision definitely made?".
+// Detects basic decision, requirements, and design signals in a conversation window.
 
-const DISCUSSION_SIGNALS = [
-  "should",
-  "think",
-  "maybe",
-  "better",
-  "use",
-  "choose",
-  "go with",
-  "instead",
-  "agree",
-  "agreed",
-  "confirmed",
-  "approve",
-  "approved",
-  "settled",
-  "locked",
-  "finalized",
-  "finalise",
-  "finalize",
-  "let's proceed",
-  "lets proceed",
-  "done",
-  "fine",
-  "makes sense",
-  "what about",
-  "moving forward",
-  "option",
-  "framework",
-  "database",
-  "frontend",
-  "backend"
-];
+
 
 export class DecisionPrefilter {
   /**
    * Analyzes a conversation window (array of {text, sender_name}) for ANY basic decision signal.
-   * Returns { shouldAnalyze: boolean, matchedPhrases: string[], reason: string }
+   * Returns { shouldAnalyze: boolean, matchedPhrases: string[], reason: string, category: string }
    */
   static analyze(messageWindow) {
     if (!messageWindow || messageWindow.length === 0) {
-      return { shouldAnalyze: false, matchedPhrases: [], reason: 'empty window' };
+      return { shouldAnalyze: false, matchedPhrases: [], reason: 'empty window', category: 'Decision' };
     }
 
     const combinedText = messageWindow
       .map(m => (m.text || '').toLowerCase())
       .join(' ');
 
-    const matchedPhrases = [];
-    for (const signal of DISCUSSION_SIGNALS) {
-      if (combinedText.includes(signal)) {
-        matchedPhrases.push(signal);
-      }
+    // Determine category based on quick semantic hints (fallback if Gemini fails)
+    let category = 'Decision';
+    if (combinedText.includes('architecture') || combinedText.includes('design') || combinedText.includes('database')) {
+      category = 'Architecture';
+    } else if (combinedText.includes('feature') || combinedText.includes('requirements') || combinedText.includes('scope')) {
+      category = 'Requirements';
     }
 
-    if (matchedPhrases.length > 0) {
-      console.log(`[DECISION PREFILTER] ✅ SIGNAL MATCH: "${matchedPhrases.join(', ')}". Delegating to Gemini.`);
-      return { shouldAnalyze: true, matchedPhrases, reason: 'signal detected' };
-    }
-
-    return { shouldAnalyze: false, matchedPhrases: [], reason: 'no decision signals' };
+    console.log(`[DECISION PREFILTER] ✅ PASS — rolling message window passed to Gemini. Preliminary category: ${category}`);
+    return { shouldAnalyze: true, matchedPhrases: ['rolling_window'], reason: 'rolling conversation analysis active', category };
   }
 }
+
 

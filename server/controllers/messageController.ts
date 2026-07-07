@@ -38,6 +38,8 @@ export const createMessage = async (req, res) => {
     const result = await pool.query(query, values);
     let newMessage = result.rows[0];
 
+    console.log(`[PIPELINE:LOG] MESSAGE_SAVED | ID: ${(newMessage as any)?.id || id} | Status: Saved to DB`);
+
     if (!newMessage && id) {
       const fetchQuery = `SELECT id, text, sender_id, sender_name, room_id, created_at FROM messages WHERE id = $1`;
       const fetchResult = await pool.query(fetchQuery, [id]);

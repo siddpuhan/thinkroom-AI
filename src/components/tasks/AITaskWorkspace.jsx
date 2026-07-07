@@ -1234,6 +1234,13 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
 
   const setTasks = useTaskStore(state => state.setTasks);
   const setDocuments = useTaskStore(state => state.setDocuments);
+  const setNotes = useTaskStore(state => state.setNotes);
+  const upsertTask = useTaskStore(state => state.upsertTask);
+  const removeTask = useTaskStore(state => state.removeTask);
+  const upsertDocument = useTaskStore(state => state.upsertDocument);
+  const removeDocument = useTaskStore(state => state.removeDocument);
+  const upsertNote = useTaskStore(state => state.upsertNote);
+  const removeNote = useTaskStore(state => state.removeNote);
 
   // Handle permanent hard deletion of items confirmed by user
   const handleConfirmPermanentDelete = useCallback(() => {
@@ -1255,19 +1262,97 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
   useEffect(() => {
     if (!socket || !roomId) return;
 
-    // Fetch existing tasks and docs on mount
+    // Fetch existing tasks, docs, and notes on mount
     socket.emit('get_tasks', { roomId }, (tasks) => {
-      if (tasks && tasks.length > 0) setTasks(tasks);
+      if (tasks && tasks.length > 0) {
+        setTasks(tasks);
+      } else {
+        setTasks([]);
+      }
     });
     
     socket.emit('get_documents', { roomId }, (docs) => {
-      if (docs && docs.length > 0) setDocuments(docs);
+      if (docs && docs.length > 0) {
+        setDocuments(docs);
+      } else {
+        setDocuments([]);
+      }
     });
 
-    return () => {
-      // Nothing to clean up since we don't have socket.on here anymore.
+    socket.emit('get_notes', { roomId }, (notes) => {
+      if (notes && notes.length > 0) {
+        setNotes(notes);
+      } else {
+        setNotes([]);
+      }
+    });
+
+    // Realtime message/AI pipeline event listeners
+    const handleTaskCreated = (task) => {
+      console.log("[SOCKET EVENT] task_created:", task);
+      upsertTask(task);
     };
-  }, [socket, roomId, setTasks, setDocuments]);
+    const handleTaskUpdated = (task) => {
+      console.log("[SOCKET EVENT] task_updated:", task);
+      upsertTask(task);
+    };
+    const handleTaskDeleted = ({ taskId }) => {
+      console.log("[SOCKET EVENT] task_deleted:", taskId);
+      removeTask(taskId);
+    };
+
+    const handleDocumentCreated = (doc) => {
+      console.log("[SOCKET EVENT] document_created:", doc);
+      upsertDocument(doc);
+    };
+    const handleDocumentUpdated = (doc) => {
+      console.log("[SOCKET EVENT] document_updated:", doc);
+      upsertDocument(doc);
+    };
+    const handleDocumentDeleted = ({ docId }) => {
+      console.log("[SOCKET EVENT] document_deleted:", docId);
+      removeDocument(docId);
+    };
+
+    const handleNoteCreated = (note) => {
+      console.log("[SOCKET EVENT] note_created:", note);
+      upsertNote(note);
+    };
+    const handleNoteUpdated = (note) => {
+      console.log("[SOCKET EVENT] note_updated:", note);
+      upsertNote(note);
+    };
+    const handleNoteDeleted = ({ noteId }) => {
+      console.log("[SOCKET EVENT] note_deleted:", noteId);
+      removeNote(noteId);
+    };
+
+    socket.on('task_created', handleTaskCreated);
+    socket.on('task_updated', handleTaskUpdated);
+    socket.on('task_deleted', handleTaskDeleted);
+
+    socket.on('document_created', handleDocumentCreated);
+    socket.on('document_updated', handleDocumentUpdated);
+    socket.on('document_deleted', handleDocumentDeleted);
+
+    socket.on('note_created', handleNoteCreated);
+    socket.on('note_updated', handleNoteUpdated);
+    socket.on('note_deleted', handleNoteDeleted);
+
+    return () => {
+      socket.off('task_created', handleTaskCreated);
+      socket.off('task_updated', handleTaskUpdated);
+      socket.off('task_deleted', handleTaskDeleted);
+
+      socket.off('document_created', handleDocumentCreated);
+      socket.off('document_updated', handleDocumentUpdated);
+      socket.off('document_deleted', handleDocumentDeleted);
+
+      socket.off('note_created', handleNoteCreated);
+      socket.off('note_updated', handleNoteUpdated);
+      socket.off('note_deleted', handleNoteDeleted);
+    };
+  }, [socket, roomId, setTasks, setDocuments, setNotes, upsertTask, removeTask, upsertDocument, removeDocument, upsertNote, removeNote]);
 
   // ── Reset state on room change ───────────────────────────
   useEffect(() => {

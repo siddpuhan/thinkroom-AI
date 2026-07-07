@@ -1,14 +1,24 @@
+import "./lib/env-init";
 import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "./lib/auth0";
 
 export async function proxy(request: NextRequest) {
-  const authRes = await auth0.middleware(request);
+  console.log("PROXY EXECUTION: APP_BASE_URL =", process.env.APP_BASE_URL, "ROUTES =", (auth0 as any).routes);
+  let authRes;
+  try {
+    authRes = await auth0.middleware(request);
+  } catch (err: any) {
+    console.error("PROXY ERROR IN AUTH0 MIDDLEWARE:", err.message, err.stack);
+    return new NextResponse(JSON.stringify({ error: err.message, stack: err.stack }), { status: 500 });
+  }
 
   const pathname = request.nextUrl.pathname;
   if (pathname.startsWith('/chat') || pathname.startsWith('/resources')) {
     const session = await auth0.getSession(request);
     if (!session) {
-      return NextResponse.redirect(new URL('/auth/login', request.url));
+      const loginUrl = new URL('/auth/login', request.url);
+      loginUrl.searchParams.set('returnTo', pathname);
+      return NextResponse.redirect(loginUrl);
     }
   }
 
