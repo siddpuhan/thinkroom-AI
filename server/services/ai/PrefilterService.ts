@@ -47,70 +47,8 @@ const EXPLICIT_ASSIGNMENT = /(need to|must|should|can you|could you|please|would
 
 export class PrefilterService {
   static shouldTriggerExtraction(message) {
-    if (!message || message.length < 5) return false;
-
-    const normalized = message.toLowerCase().trim();
-    const words = normalized.split(/\s+/);
-
-    // Rule 1: @Mention + any action verb
-    if (MENTION_REGEX.test(normalized)) {
-      if (words.some(w => ACTION_VERBS.has(w))) {
-        console.log(`[PREFILTER] ✅ PASS — @mention + action verb`);
-        return true;
-      }
-    }
-
-    // Rule 2: Time-bounded language (includes time-of-day like 2pm)
-    if (TIME_INDICATORS.test(normalized)) {
-      console.log(`[PREFILTER] ✅ PASS — time indicator detected`);
-      return true;
-    }
-
-    // Rule 3: Explicit obligation/request language + action verb
-    if (EXPLICIT_ASSIGNMENT.test(normalized)) {
-      if (words.some(w => ACTION_VERBS.has(w))) {
-        console.log(`[PREFILTER] ✅ PASS — explicit assignment language`);
-        return true;
-      }
-    }
-
-    // Rule 4: Direct verb-first imperatives — "Prepare the excel", "Submit the report"
-    if (ACTION_VERBS.has(words[0])) {
-      console.log(`[PREFILTER] ✅ PASS — imperative verb-first sentence`);
-      return true;
-    }
-
-    // Rule 5: Name-assignment pattern (case-insensitive, short names ok)
-    // "Siddharth prepare...", "od prepare...", "siddharth take..."
-    if (NAME_ASSIGNMENT_REGEX.test(message)) {
-      const match = NAME_ASSIGNMENT_REGEX.exec(message);
-      if (match) {
-        const verbCandidate = match[2].toLowerCase();
-        if (ACTION_VERBS.has(verbCandidate) || normalized.startsWith('assign')) {
-          console.log(`[PREFILTER] ✅ PASS — name-assignment: "${match[1]} ${match[2]}"`);
-          return true;
-        }
-      }
-    }
-
-    // Rule 6: Any action verb appears anywhere in a short message (<= 12 words)
-    // Catches: "od prepare excel", "take the meeting", etc.
-    if (words.length <= 12 && words.some(w => ACTION_VERBS.has(w))) {
-      // Require at least one "noun-like" word (not just verbs alone)
-      const nonVerbWords = words.filter(w => !ACTION_VERBS.has(w) && w.length > 2);
-      if (nonVerbWords.length >= 1) {
-        console.log(`[PREFILTER] ✅ PASS — action verb in short message: "${words.find(w => ACTION_VERBS.has(w))}"`);
-        return true;
-      }
-    }
-
-    // Rule 7: Explicit "assign X to Y" pattern
-    if (/assign\s+\w+\s+to/i.test(normalized)) {
-      console.log(`[PREFILTER] ✅ PASS — "assign X to Y" pattern`);
-      return true;
-    }
-
-    console.log(`[PREFILTER] ❌ SKIP — no task signal in: "${message.substring(0, 60)}"`);
-    return false;
+    if (!message || message.trim().length < 2) return false;
+    console.log(`[PREFILTER] ✅ PASS — non-empty message passed to Gemini`);
+    return true;
   }
 }

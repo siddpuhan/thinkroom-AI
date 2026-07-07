@@ -16,7 +16,9 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith('/chat') || pathname.startsWith('/resources')) {
     const session = await auth0.getSession(request);
     if (!session) {
-      return NextResponse.redirect(new URL('/auth/login', request.url));
+      const loginUrl = new URL('/auth/login', request.url);
+      loginUrl.searchParams.set('returnTo', pathname);
+      return NextResponse.redirect(loginUrl);
     }
   }
 

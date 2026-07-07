@@ -4,6 +4,11 @@ const NOTE_RULES = [
   { type: 'Risk', phrases: ['issue', 'problem', 'security', 'concern', 'dangerous', 'bug', 'risky'] },
   { type: 'Observation', phrases: ['noticed', 'seems', 'looks', 'observed'] },
   { type: 'Resource', phrases: ['documentation', 'github', 'article', 'tutorial', 'official docs', 'docs'] },
+  { type: 'Decision', phrases: ['decided', 'decision', 'we will', 'agreed', 'chose', 'selected', 'approved', 'finalized', 'finalise', 'finalize'] },
+  { type: 'Insight', phrases: ['insight', 'technical', 'performance', 'optimization', 'discovered', 'learned', 'found'] },
+  { type: 'Architecture', phrases: ['architecture', 'database', 'design', 'layout', 'structure', 'component', 'pipeline', 'flow'] },
+  { type: 'Action Item', phrases: ['todo', 'action item', 'need to', 'must do', 'should do', 'task', 'assign'] },
+  { type: 'Conclusion', phrases: ['conclusion', 'conclude', 'finally', 'resolved', 'solved', 'fixed', 'closed'] },
 ];
 
 export class NotesPrefilter {

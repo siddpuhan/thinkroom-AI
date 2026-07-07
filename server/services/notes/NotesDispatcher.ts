@@ -4,31 +4,24 @@ import { NotesService } from './NotesService.js';
 
 export class NotesDispatcher {
   static async process({ messageText, roomId, senderName, io }) {
-    const pipelineId = `[NOTES:${Date.now().toString(36)}]`;
-
-    console.log(`${pipelineId} ─────────────────────────────────────`);
-    console.log(`${pipelineId} 📥 MESSAGE RECEIVED for notes extraction`);
-    console.log(`${pipelineId} Text: "${messageText.substring(0, 120)}"`);
-    console.log(`${pipelineId} Room: ${roomId} | Sender: ${senderName}`);
+    console.log(`[PIPELINE:LOG] NOTES_EXTRACTION_STARTED | Room: ${roomId}`);
 
     const prefilter = NotesPrefilter.analyze(messageText);
     if (!prefilter.shouldAnalyze) {
-      console.log(`${pipelineId} ⛔ PRE-FILTER: No note signal detected. Skipping Gemini.`);
+      console.log(`[PIPELINE:LOG] NOTES_EXTRACTION_COMPLETED | Room: ${roomId} | Status: Skipped (pre-filter)`);
       return;
     }
-
-    console.log(`${pipelineId} ✅ PRE-FILTER: ${prefilter.matchedTypes.join(', ')} (${prefilter.matchedPhrases.join(', ')})`);
 
     let notes = [];
     try {
       notes = await GeminiNotesExtraction.extractNotes(messageText, roomId, senderName, prefilter.matchedTypes);
     } catch (err: any) {
-      console.error(`${pipelineId} ❌ Gemini call failed:`, err.message);
+      console.error(`[PIPELINE:LOG] NOTES_EXTRACTION_FAILED | Room: ${roomId} | Error: ${err.message}`);
       return;
     }
 
     if (notes.length === 0) {
-      console.log(`${pipelineId} ℹ️ No notes detected by Gemini.`);
+      console.log(`[PIPELINE:LOG] NOTES_EXTRACTION_COMPLETED | Room: ${roomId} | Status: No notes found`);
       return;
     }
 
@@ -36,7 +29,7 @@ export class NotesDispatcher {
       try {
         const isDup = await NotesService.isDuplicate(roomId, noteData.type, noteData.title);
         if (isDup) {
-          console.log(`${pipelineId} ⚠️ DUPLICATE: "${noteData.title}" — skipping`);
+          console.log(`[PIPELINE:LOG] NOTES_EXTRACTION_COMPLETED | Room: ${roomId} | Status: Duplicate skipped ("${noteData.title}")`);
           continue;
         }
 
@@ -49,14 +42,12 @@ export class NotesDispatcher {
           createdBy: senderName || 'AI_SYSTEM',
         });
 
-        console.log(`${pipelineId} ✅ NOTE CREATED: id=${newNote.id} type=${newNote.type} title="${newNote.title}"`);
+        console.log(`[PIPELINE:LOG] NOTE_SAVED | ID: ${newNote.id} | Room: ${roomId} | Title: "${newNote.title}"`);
         io.to(roomId).emit('note_created', newNote);
-      } catch (err) {
-        console.error(`${pipelineId} ❌ NOTE INSERT FAILED for "${noteData.title}":`, err.message);
+        console.log(`[PIPELINE:LOG] NOTE_EMITTED | ID: ${newNote.id} | Room: ${roomId}`);
+      } catch (err: any) {
+        console.error(`[PIPELINE:LOG] NOTE_SAVE_FAILED | Room: ${roomId} | Error: ${err.message}`);
       }
     }
-
-    console.log(`${pipelineId} 🏁 PIPELINE COMPLETE`);
-    console.log(`${pipelineId} ─────────────────────────────────────`);
   }
 }

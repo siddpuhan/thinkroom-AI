@@ -43,32 +43,35 @@ export class GeminiDecisionExtraction {
         })}`
       : '';
 
-    const systemPrompt = `You are a production-grade AI meeting assistant that manages decisions over time.
+    const systemPrompt = `You are a staff-level technical coordinator and project manager AI document engine.
+Your job is to analyze a conversation window and determine if a document, decision, or architectural record candidate should be created, updated, or finalized.
 
-Your job is to analyze a conversation window and detect whether a decision candidate exists, is evolving, or is final.
+SUPPORTED DOCUMENT TYPES & CATEGORIES:
+- "Decision Record": Finalized choices or agreements made by the team. (Map to "Decision Record")
+- "Architecture Document": High-level descriptions of software layout, component design, databases, etc. (Map to "Architecture Document")
+- "Requirements Document": Feature roadmaps, functional requirements, scope definitions, or project parameters. (Map to "Requirements Document")
+- "Technical Design": Code designs, deployment strategies, and technical integration specifications. (Map to "Technical Design")
+- "Meeting Summary": Structured summaries of team meetings or workspace catch-ups. (Map to "Meeting Summary")
 
-CRITICAL RULES:
-- A decision candidate begins as PENDING. Never treat the first signal as a final decision.
-- Require at least 2 participants and one or more confirmation phrases for CONFIRMED status.
-- Confirmation phrases include: agreed, confirmed, approved, settled, locked, finalized, let's proceed, done, fine.
-- If contradictions still exist, do NOT finalize. Update the candidate instead.
-- If the conversation reverses a prior candidate (for example Tomorrow -> Today -> Tomorrow holiday -> Fine tomorrow), preserve the latest stable resolution.
-- Only return CONFIRMED when confidence is above 0.85 and the discussion is stable.
-- Return REJECTED when the conversation clearly invalidates the candidate.
+CRITICAL WORKFLOW RULES:
+1. semantic understanding: Analyze the conversation history context and detect if discussions are reaching agreements (status: "confirmed"), are in brainstorming/drafting stages (status: "pending"), or are rejected (status: "rejected").
+2. Explicit request: If the user says "@ai generate document" or similar, create the appropriate document type immediately.
+3. Keep titles descriptive and content highly detailed.
 
-RESPOND WITH STRICT JSON ONLY (no markdown formatting block):
+RESPOND WITH STRICT JSON ONLY (no markdown formatting block, no explanations):
 {
   "decisions": [
     {
       "status": "pending" | "confirmed" | "rejected",
-      "title": "Short descriptive title",
-      "decision": "What is currently being decided or has been decided",
-      "reason": "The main justification or reasoning behind the decision",
-      "alternativesDiscussed": ["Option A", "Option B"],
+      "category": "Decision Record" | "Architecture Document" | "Requirements Document" | "Technical Design" | "Meeting Summary",
+      "title": "Document Title",
+      "decision": "Detailed contents of what is decided, planned, or designed",
+      "reason": "Justification, context, or rationale",
+      "alternativesDiscussed": ["Alternative A", "Alternative B"],
       "participants": ["Name1", "Name2"],
-      "confidence": 0.92,
-      "discussionSummary": "2-3 sentence summary of the discussion",
-      "sourceMessageIndices": [3, 5, 7, 8],
+      "confidence": 0.85,
+      "discussionSummary": "2-3 sentences summarizing the discussion flow",
+      "sourceMessageIndices": [1, 2, 3],
       "confirmationPhrases": ["Agreed", "Confirmed"],
       "contradictionDetected": false,
       "contradictionReason": "",
@@ -79,22 +82,7 @@ RESPOND WITH STRICT JSON ONLY (no markdown formatting block):
   ]
 }
 
-If no decision candidate exists, return: {"decisions": []}
-
-EXAMPLES:
-
-Conversation:
-[1] Alice: "Should we use PostgreSQL or MongoDB?"
-[2] Bob: "PostgreSQL for sure, we need ACID transactions"
-[3] Alice: "Agreed, let's go with PostgreSQL"
-[4] Bob: "Confirmed, PostgreSQL it is"
-
-→ {"decisions": [{"status": "confirmed", "confidence": 0.95, "title": "Database Selection: PostgreSQL", "discussionSummary": "The team discussed database options and evaluated PostgreSQL vs MongoDB.", "decision": "PostgreSQL selected as the primary database.", "reason": "Requires ACID transactions for data integrity.", "alternativesDiscussed": ["MongoDB"], "participants": ["Alice", "Bob"], "sourceMessageIndices": [1, 2, 3, 4], "confirmationPhrases": ["Agreed", "Confirmed"], "contradictionDetected": false, "contradictionReason": "", "hasConsensus": true, "finalizable": true, "needsMoreDiscussion": false}]}
-
-Conversation:
-[1] Dave: "Maybe we should use Tailwind"
-
-→ {"decisions": []}${existingCandidateBlock}`;
+If no document or decision is found in the conversation window, return: {"decisions": []}`;
 
     try {
       logger.info("DECISION-EXTRACTION", `📡 Calling Gemini API (model: gemini-2.5-flash)...`);
@@ -108,7 +96,7 @@ Conversation:
 
       const response = await withRetry(() => model.generateContent({
         contents: [
-          { role: 'user', parts: [{ text: `${systemPrompt}\n\nAnalyze this conversation for decisions and evolving decision candidates.\n\n${conversationText}\n\nParticipants: ${participants.join(', ')}` }] }
+          { role: 'user', parts: [{ text: `${systemPrompt}\n\nAnalyze this conversation context:\n\n${conversationText}\n\nParticipants: ${participants.join(', ')}` }] }
         ]
       }));
 
@@ -127,8 +115,17 @@ Conversation:
           const participants = Array.isArray(decision.participants) ? decision.participants : [];
           const sourceMessages = (decision.sourceMessageIndices || []).map(i => messageWindow[i - 1]).filter(Boolean);
 
+          let dbCategory = 'Decision';
+          const incomingCat = decision.category || 'Decision Record';
+          if (incomingCat === 'Decision Record') dbCategory = 'Decision';
+          else if (incomingCat === 'Architecture Document' || incomingCat === 'Technical Design') dbCategory = 'Architecture';
+          else if (incomingCat === 'Requirements Document') dbCategory = 'Requirements';
+          else if (incomingCat === 'Meeting Summary') dbCategory = 'Meeting Summary';
+          else if (['Decision', 'Requirements', 'Architecture', 'Meeting Summary'].includes(incomingCat)) dbCategory = incomingCat;
+
           return {
             status: ['pending', 'confirmed', 'rejected'].includes(decision.status) ? decision.status : 'pending',
+            category: dbCategory,
             title: typeof decision.title === 'string' ? decision.title.trim() : '',
             decision: typeof decision.decision === 'string' ? decision.decision.trim() : '',
             reason: typeof decision.reason === 'string' ? decision.reason.trim() : '',
