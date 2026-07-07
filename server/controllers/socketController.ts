@@ -1,4 +1,5 @@
 import { Server, Socket } from "socket.io";
+import { getDB } from "../config/db.js";
 import { AuthService } from "../services/auth/auth.service.js";
 import { detectPersona } from "../ai/router.js";
 import { processPersonaStream } from "../ai/geminiService.js";
@@ -50,8 +51,9 @@ async function runTaskExtractionPipeline(messageText, roomId, senderName, source
     console.error(`[PIPELINE:LOG] TASK_EXTRACTION_HISTORY_FAILED | Room: ${roomId} | Error: ${err.message}`);
   }
 
-  // STEP 2: Gemini extraction
-  let extractedTasks = [];
+  try {
+    // STEP 2: Gemini extraction
+    let extractedTasks = [];
   try {
     extractedTasks = await GeminiExtraction.extractTasks(messageText, roomId, senderName, history);
   } catch (err: any) {

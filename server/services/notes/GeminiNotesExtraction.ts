@@ -76,7 +76,7 @@ Message: "Authentication works now, I fixed the cookie middleware."
 → {"notes":[{"type":"Conclusion","title":"Auth Cookie Fix","content":"Fixed the Auth0 cookie middleware to resolve session hydration errors.","confidence":0.93}]}
 
 Message: "Our architecture will use Next.js, Express, PostgreSQL and Socket.IO"
-→ {"notes":[{"type":"Architecture","title":"ThinkRoom Tech Stack","content":"Core tech stack agreed on: Next.js frontend, Express backend, PostgreSQL database, and Socket.IO for realtime synchronization.","confidence":0.97}]}`;
+→ {"notes":[{"type":"Architecture","title":"ThinkRoom Tech Stack","content":"Core tech stack agreed on: Next.js frontend, Express backend, PostgreSQL database, and Socket.IO for realtime synchronization.","confidence":0.97}]}
 
 Message: "React docs explain this."
 → {"notes":[{"type":"Resource","title":"React documentation","content":"React docs explain the approach or behavior.","confidence":0.87}]}
