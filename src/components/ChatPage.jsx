@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef, useContext, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useContext, lazy, Suspense, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useUser as useAuth0User, getAccessToken } from '@auth0/nextjs-auth0/client';
 import MessageBubble from '../MessageBubble';
@@ -143,14 +143,52 @@ const { theme, toggleTheme } = useContext(ThemeContext);
      const [socketInstance, setSocketInstance] = useState(null); // live socket for child components
      const [showMemoryDebug, setShowMemoryDebug] = useState(false);
      const [memoryDebugInfo, setMemoryDebugInfo] = useState(null);
-    const messageListRef = useRef(null);
-    const socketRef = useRef(null);
-    const isSyncingOfflineRef = useRef(false);
-    const activeRoomRef = useRef('');
+     const messageListRef = useRef(null);
+     const socketRef = useRef(null);
+     const isSyncingOfflineRef = useRef(false);
+     const activeRoomRef = useRef('');
+     const [showNewMessageIndicator, setShowNewMessageIndicator] = useState(false);
+
+     const scrollToBottom = useCallback((force = false) => {
+       const el = messageListRef.current;
+       if (!el) return;
+       if (force) {
+         requestAnimationFrame(() => {
+           el.scrollTop = el.scrollHeight;
+         });
+         setShowNewMessageIndicator(false);
+       } else {
+         const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 180;
+         if (isNearBottom) {
+           requestAnimationFrame(() => {
+             el.scrollTop = el.scrollHeight;
+           });
+         } else {
+           setShowNewMessageIndicator(true);
+         }
+       }
+     }, []);
+
+     const handleScroll = useCallback(() => {
+       const el = messageListRef.current;
+       if (!el) return;
+       const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 180;
+       if (isNearBottom) {
+         setShowNewMessageIndicator(false);
+       }
+     }, []);
 
   useEffect(() => {
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
+
+  useEffect(() => {
+    if (activeRoom) {
+      setTimeout(() => {
+        scrollToBottom(true);
+      }, 100);
+    }
+  }, [activeRoom, scrollToBottom]);
 
   useEffect(() => {
     const handleKeyDown = async (e) => {
@@ -285,6 +323,11 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       }
       
       setMessages((prev) => addMessageIfMissing(prev, { ...msg, status: msg.status || 'delivered' }));
+      
+      const isMine = msg.sender_id === currentUserIdRef.current;
+      setTimeout(() => {
+        scrollToBottom(isMine);
+      }, 50);
     };
 
     const handleStreamStart = (data) => {
@@ -305,6 +348,9 @@ const { theme, toggleTheme } = useContext(ThemeContext);
         color: msgData?.color,
         personaId: msgData?.personaId
       }));
+      setTimeout(() => {
+        scrollToBottom(false);
+      }, 50);
     };
 
     socket.on("receive_message", handler);
@@ -318,7 +364,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       socket.off("ai_stream_chunk", handleStreamChunk);
       socket.off("ai_stream_end", handleStreamEnd);
     };
-  }, [activeRoom, socketInstance, addStreamStart, appendStreamChunk, finalizeStream]);
+  }, [activeRoom, socketInstance, addStreamStart, appendStreamChunk, finalizeStream, scrollToBottom]);
 
   useEffect(() => {
     async function fetchMessages() {
@@ -335,10 +381,13 @@ const { theme, toggleTheme } = useContext(ThemeContext);
         setMessageError('Failed to load messages');
       } finally {
         setLoadingMessages(false);
+        setTimeout(() => {
+          scrollToBottom(true);
+        }, 100);
       }
     }
     fetchMessages();
-  }, [activeRoom]);
+  }, [activeRoom, scrollToBottom]);
 
   useEffect(() => {
     const syncOfflineMessages = async () => {
@@ -398,15 +447,8 @@ const { theme, toggleTheme } = useContext(ThemeContext);
   }, [isOnline]);
 
   useEffect(() => {
-    const el = messageListRef.current;
-    if (!el) return;
-    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-    if (isNearBottom) {
-      requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
-      });
-    }
-  }, [messages, isThinking, streamingMessages]);
+    scrollToBottom(false);
+  }, [isThinking, streamingMessages, scrollToBottom]);
 
   const handleSendMessage = async (messageText) => {
     if (!messageText || messageText.trim() === '') return;
@@ -426,6 +468,9 @@ const { theme, toggleTheme } = useContext(ThemeContext);
     };
 
     setMessages((prevMessages) => [...prevMessages, tempMessage]);
+    setTimeout(() => {
+      scrollToBottom(true);
+    }, 50);
     
     setMessageError('');
 
@@ -580,7 +625,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
           <div className="chat-container">
             <div className="chat-layout">
               <div className="chat-content">
-                <div className="message-list" ref={messageListRef}>
+                <div className="message-list" ref={messageListRef} onScroll={handleScroll}>
                 {loadingMessages ? (
                   <div className="empty-state">Loading messages...</div>
                 ) : messageError ? (
@@ -620,6 +665,15 @@ const { theme, toggleTheme } = useContext(ThemeContext);
                   </div>
                 )}
               </div>
+              {showNewMessageIndicator && (
+                <button
+                  type="button"
+                  className="new-messages-indicator"
+                  onClick={() => scrollToBottom(true)}
+                >
+                  New Messages ↓
+                </button>
+              )}
               <ChatInput
                 onSendMessage={handleSendMessage}
                 socket={socketInstance}
