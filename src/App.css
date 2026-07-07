@@ -251,6 +251,7 @@ body {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 /* Message List — THE scrollable area */
@@ -541,4 +542,45 @@ body {
 
 .recap-button:active {
   transform: translateY(0);
+}
+
+.new-messages-indicator {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #38bdf8;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+  animation: bounce-indicator 2s infinite;
+}
+
+.new-messages-indicator:hover {
+  background: rgba(15, 23, 42, 0.95);
+  color: #0ea5e9;
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 6px 16px rgba(56, 189, 248, 0.25);
+  transform: translateX(-50%) translateY(-2px);
+}
+
+@keyframes bounce-indicator {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-4px);
+  }
 }
