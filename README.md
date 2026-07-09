@@ -21,7 +21,7 @@ ThinkRoom AI is an innovative, real-time collaboration environment designed to i
 ThinkRoom AI employs a robust and scalable architecture, utilizing a modern web stack. It uses a Next.js frontend, communicating via Socket.IO with an Express.js Node backend. The backend interfaces with PostgreSQL for data persistence and leverages the Gemini and OpenAI APIs for AI extraction and persona pipelines.
 
 ## 4. Tech Stack
-* **Frontend:** Next.js, Framer Motion, Zustand, Auth0 (Auth)
+ * **Frontend:** Next.js, Framer Motion, Zustand, Supabase Auth
 * **Backend:** Node.js, Express, Socket.IO
 * **Database:** PostgreSQL
 * **AI Integration:** Gemini API, OpenAI API
@@ -42,12 +42,10 @@ pnpm install
 ## 6. Environment Variables
 Create a `.env.local` file in the root directory:
 ```env
-APP_BASE_URL=http://localhost:3000
-AUTH0_DOMAIN=your_auth0_domain
-AUTH0_CLIENT_ID=your_client_id
-AUTH0_CLIENT_SECRET=your_client_secret
-AUTH0_SECRET=your_session_secret
-AUTH0_AUDIENCE=your_api_audience
+NEXT_PUBLIC_SUPABASE_URL=https://<your-project-id>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
+SUPABASE_URL=https://<your-project-id>.supabase.co
+SUPABASE_ANON_KEY=<your-anon-key>
 DATABASE_URL=your_postgresql_connection_string
 GEMINI_API_KEY=your_gemini_api_key
 OPENAI_API_KEY=your_openai_api_key

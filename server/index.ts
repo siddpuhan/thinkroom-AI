@@ -1,32 +1,6 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-
-// Load server and parent workspace env variables
-dotenv.config({ path: new URL("./.env", import.meta.url) });
-dotenv.config({ path: new URL("../.env.local", import.meta.url) });
-dotenv.config({ path: new URL("../.env", import.meta.url) });
-
-const requiredEnv = [
-  'AUTH0_SECRET',
-  'AUTH0_DOMAIN',
-  'AUTH0_CLIENT_ID',
-  'AUTH0_CLIENT_SECRET',
-  'AUTH0_AUDIENCE',
-  'APP_BASE_URL',
-  'DATABASE_URL',
-  'GEMINI_API_KEY'
-];
-
-const missingEnv = requiredEnv.filter(key => !process.env[key]);
-if (missingEnv.length > 0) {
-  console.error("\n❌ CRITICAL STARTUP ERROR: Missing required environment variables:\n");
-  missingEnv.forEach(key => {
-    console.error(`   - ${key}`);
-  });
-  console.error("\nPlease configure these variables in your .env or .env.local files before launching the server.\n");
-  process.exit(1);
-}
+import { PORT } from "./config/env.js";
 import { createServer } from "http";
 import { Server } from "socket.io";
 
@@ -64,7 +38,6 @@ const io = new Server(httpServer, {
   cors: corsOptions,
   transports: ['websocket', 'polling']
 });
-const PORT = process.env.PORT || 5000;
 
 app.use(cors(corsOptions));
 app.use(securityMiddleware);

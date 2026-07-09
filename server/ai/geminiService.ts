@@ -1,10 +1,7 @@
 import { googleAI, withRetry } from "../utils/geminiClient.js";
 import { getDB } from "../config/db.js";
 import { logger } from "../utils/logger.js";
-import dotenv from "dotenv";
 import { MemoryService } from "../services/memory/MemoryService.js";
-
-dotenv.config();
 
 export async function processPersonaStream(roomId, messageId, cleanPrompt, persona, io) {
   const pool = getDB();

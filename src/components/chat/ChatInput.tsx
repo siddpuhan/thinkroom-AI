@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useState, memo } from 'react';
 import { SendHorizontal, Paperclip } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
-import { useUser } from '@auth0/nextjs-auth0/client';
+import { useUser } from '../SupabaseProvider';
 import '../ChatInput.css';
 
 interface ChatInputProps {
@@ -43,7 +43,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = false, 
   const socket = useChatStore((state: any) => state.socket);
   const roomId = useChatStore((state: any) => state.roomId);
   const { user } = useUser();
-  const userName = user?.name || user?.nickname || 'Anonymous';
+  const userName = (user?.user_metadata as any)?.full_name || (user?.user_metadata as any)?.name || user?.email || 'Anonymous';
 
   // Auto-resize textarea logic
   useEffect(() => {

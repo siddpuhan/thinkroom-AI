@@ -13,6 +13,15 @@ import { NotesDispatcher } from "../services/notes/NotesDispatcher.js";
 import { NotesService } from "../services/notes/NotesService.js";
 import { SummaryBuilder } from "../services/summary/SummaryBuilder.js";
 import { MemoryService } from "../services/memory/MemoryService.js";
+import { logger } from "../utils/logger.js";
+
+// ─────────────────────────────────────────────────────────────────────────
+// Structured pipeline logging. Every stage of the AI orchestration emits a
+// single structured log line so a full message lifecycle can be traced.
+// ─────────────────────────────────────────────────────────────────────────
+function logStage(stage: string, meta: Record<string, unknown> = {}) {
+  logger.info("PIPELINE", JSON.stringify({ stage, ...meta }));
+}
 
 export const setupSocket = (io: Server) => {
 // ============================================================
@@ -28,12 +37,12 @@ export const setupSocket = (io: Server) => {
 async function runTaskExtractionPipeline(messageText, roomId, senderName, sourceMessageId) {
   const pipelineId = `[PIPELINE:${Date.now().toString(36)}]`;
   
-  console.log(`[PIPELINE:LOG] TASK_EXTRACTION_STARTED | MessageId: ${sourceMessageId} | Room: ${roomId}`);
+  logStage("TASK_EXTRACTION_STARTED", { messageId: sourceMessageId, roomId, senderName });
   
   // STEP 1: Pre-filter gate (no Gemini call yet)
   const shouldExtract = PrefilterService.shouldTriggerExtraction(messageText);
   if (!shouldExtract) {
-    console.log(`[PIPELINE:LOG] TASK_EXTRACTION_COMPLETED | MessageId: ${sourceMessageId} | Status: Skipped (pre-filter)`);
+    logStage("TASK_EXTRACTION_SKIPPED", { messageId: sourceMessageId, roomId, reason: "pre-filter" });
     return;
   }
   io.to(roomId).emit("task_generation_status", { status: 'generating' });
@@ -48,7 +57,7 @@ async function runTaskExtractionPipeline(messageText, roomId, senderName, source
     );
     history = historyResult.rows.reverse();
   } catch (err: any) {
-    console.error(`[PIPELINE:LOG] TASK_EXTRACTION_HISTORY_FAILED | Room: ${roomId} | Error: ${err.message}`);
+    logStage("TASK_EXTRACTION_HISTORY_FAILED", { roomId, error: err.message });
   }
 
   try {
@@ -57,12 +66,12 @@ async function runTaskExtractionPipeline(messageText, roomId, senderName, source
   try {
     extractedTasks = await GeminiExtraction.extractTasks(messageText, roomId, senderName, history);
   } catch (err: any) {
-      console.error(`[PIPELINE:LOG] TASK_EXTRACTION_FAILED | MessageId: ${sourceMessageId} | Error: ${err.message}`);
+      logStage("TASK_EXTRACTION_FAILED", { messageId: sourceMessageId, roomId, error: err.message });
       return;
     }
 
     if (extractedTasks.length === 0) {
-      console.log(`[PIPELINE:LOG] TASK_EXTRACTION_COMPLETED | MessageId: ${sourceMessageId} | Status: No tasks found`);
+      logStage("TASK_EXTRACTION_NO_TASKS", { messageId: sourceMessageId, roomId });
       return;
     }
 
@@ -83,18 +92,18 @@ async function runTaskExtractionPipeline(messageText, roomId, senderName, source
           createdBy: 'AI_SYSTEM'
         });
 
-        console.log(`[PIPELINE:LOG] TASK_SAVED | ID: ${newTask.id} | Room: ${roomId} | Title: "${newTask.title}"`);
+        logStage("TASK_SAVED", { id: newTask.id, roomId, title: newTask.title });
 
         // STEP 4: Emit task_created to all room members
         io.to(roomId).emit("task_created", {
           ...newTask,
           assignedToName: newTask.assigned_to_name || null,
         });
-        console.log(`[PIPELINE:LOG] TASK_EMITTED | ID: ${newTask.id} | Room: ${roomId}`);
+        logStage("TASK_EMITTED", { id: newTask.id, roomId });
         MemoryService.triggerBackgroundRebuild(roomId);
 
       } catch (dbErr: any) {
-        console.error(`[PIPELINE:LOG] TASK_SAVE_FAILED | Room: ${roomId} | Error: ${dbErr.message}`);
+        logStage("TASK_SAVE_FAILED", { roomId, error: dbErr.message });
       }
     }
   } finally {
@@ -141,12 +150,12 @@ io.on("connection", (socket) => {
 
   // ─── Message Handling ──────────────────────────────────────
   socket.on("send_message", ({ roomId, message }) => {
-    console.log(`[PIPELINE:LOG] MESSAGE_RECEIVED | ID: ${message?.id} | Room: ${roomId} | Sender: ${message?.sender_name}`);
-    
+    logStage("MESSAGE_RECEIVED", { id: message?.id, roomId, sender: message?.sender_name });
+
     // 1. Immediately broadcast to room (chat rendering)
     io.to(roomId).emit("receive_message", message);
     io.to(roomId).emit("message_created", message);
-    console.log(`[PIPELINE:LOG] MESSAGE_EMITTED | ID: ${message?.id} | Room: ${roomId} | Broadcast complete`);
+    logStage("MESSAGE_BROADCAST", { id: message?.id, roomId });
 
     const messageText = (message.text || message.content || '').trim();
     if (!messageText) return;
@@ -156,7 +165,7 @@ io.on("connection", (socket) => {
     // 2. Persona routing (if message starts with @persona)
     const match = detectPersona(messageText);
     if (match) {
-      console.log(`[SOCKET] 🎭 Persona match: ${match.persona?.id} — routing to persona handler`);
+      logStage("PERSONA_ROUTED", { roomId, persona: match.persona?.id });
       processPersonaStream(roomId, message.id || Date.now().toString(), match.cleanPrompt, match.persona, io);
       // NOTE: Persona messages do NOT go through task extraction pipeline
       return;
@@ -164,22 +173,22 @@ io.on("connection", (socket) => {
 
     // 3. Task extraction pipeline (async, non-blocking, completely isolated)
     // Runs ONLY on non-persona messages
-    console.log(`[SOCKET] 🔍 Routing to task extraction pipeline...`);
+    logStage("TASK_PIPELINE_QUEUED", { roomId });
     setImmediate(() => {
       runTaskExtractionPipeline(messageText, roomId, senderName, message.id || null)
-        .catch(err => console.error(`[SOCKET] ❌ Task pipeline unhandled error:`, err));
+        .catch(err => logStage("TASK_PIPELINE_ERROR", { roomId, error: String(err) }));
     });
 
     // 4. Decision workflow — stage/update candidate, then finalize only after stability
     ConversationBuffer.push(roomId, message);
     DecisionWorkflow.observeMessage({ roomId, message, io })
-      .catch(err => console.error(`[SOCKET] ❌ Decision workflow error:`, err));
+      .catch(err => logStage("DECISION_PIPELINE_ERROR", { roomId, error: String(err) }));
 
     // 5. Notes dispatcher — independent from task and decision engines
-    console.log(`[SOCKET] 📝 Routing to notes extraction pipeline...`);
+    logStage("NOTES_PIPELINE_QUEUED", { roomId });
     setImmediate(() => {
       NotesDispatcher.process({ messageText, roomId, senderName, io })
-        .catch(err => console.error(`[SOCKET] ❌ Notes pipeline unhandled error:`, err));
+        .catch(err => logStage("NOTES_PIPELINE_ERROR", { roomId, error: String(err) }));
     });
   });
 

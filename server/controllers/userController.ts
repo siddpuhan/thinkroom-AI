@@ -2,10 +2,10 @@ import { AuthService } from '../services/auth/auth.service.js';
 
 export const syncUser = async (req: any, res: any) => {
   try {
-    const { id, name, email } = req.body;
+    const { id, name, email, avatarUrl } = req.body;
     
     // Auth service handles the DB upsert
-    const user = await AuthService.syncUser(id, name, email);
+    const user = await AuthService.syncUser(id, name, email, avatarUrl);
 
     return res.status(200).json({
       success: true,

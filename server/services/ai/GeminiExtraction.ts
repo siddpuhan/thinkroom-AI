@@ -8,7 +8,10 @@ import { logger } from "../../utils/logger.js";
 
 dotenv.config();
 
-const CONFIDENCE_THRESHOLD = 0.5;
+// Low bar: we WANT the model to surface actionable intent from natural,
+// conversational language. False positives only cost one extra Gemini call;
+// false negatives (missed tasks) are the real failure mode.
+const CONFIDENCE_THRESHOLD = 0.4;
 
 export class GeminiExtraction {
   /**
@@ -55,12 +58,13 @@ ROOM MEMBERS (known names):
 ${JSON.stringify(roomMembers)}
 
 EXTRACTION GUIDELINES:
-1. semantic understanding: A task should be created whenever the message or conversation indicates actionable work, an assignment, a reminder, a promise, a commitment, a deadline, a responsibility, a follow-up, a request, or an action item.
-2. Context matching: Use the conversation context to resolve who tasks are assigned to, or what the task refers to. For example, if User A says "We should redesign the landing page" and User B says "Anshika can you handle it?", you should resolve this to a task "Redesign landing page" assigned to "Anshika".
-3. Assignee name: Match the assignee name against the Room Members list if possible. If not found, use the name as written. If no one is assigned, use null.
-4. Priority: Must be exactly one of: "low", "medium", "high", or "urgent".
-5. Deadline: Estimate the ISO8601 datetime if a timeline is mentioned (e.g. "tomorrow", "Friday"). Today is ${new Date().toISOString().split('T')[0]}.
-6. Confidence: A float between 0.0 and 1.0. Set at least 0.6 for any clear action item.
+1. Natural language first: Understand the message the way a human project manager would. People rarely use rigid commands. Recognize implied action items from casual phrasing such as "Anshika prepare DSA notes", "Rahul deploy backend today", "Finish landing page before Monday", "Review my PR", "Call the client tomorrow", or "Push today's work to GitHub". If the message conveys that someone should do something, create a task.
+2. Never rely on keywords alone. Judge intent from meaning and context, not from the presence of specific verbs.
+3. Context matching: Use the conversation context to resolve who tasks are assigned to, or what the task refers to. For example, if User A says "We should redesign the landing page" and User B says "Anshika can you handle it?", you should resolve this to a task "Redesign landing page" assigned to "Anshika".
+4. Assignee name: Match the assignee name against the Room Members list if possible. If not found, use the name as written. Pay attention to "Name <verb>" patterns (e.g. "Anshika prepare..."). If no one is assigned, use null.
+5. Priority: Must be exactly one of: "low", "medium", "high", or "urgent".
+6. Deadline: Estimate the ISO8601 datetime if a timeline is mentioned (e.g. "tomorrow", "Friday"). Today is ${new Date().toISOString().split('T')[0]}.
+7. Confidence: A float between 0.0 and 1.0. Set at least 0.7 for any clear action item, and never below 0.4 for anything you choose to include.
 
 RETURN ONLY STRICT JSON IN THIS FORMAT (no markdown code blocks, no trailing comments, no explanation):
 {

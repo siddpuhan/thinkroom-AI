@@ -142,7 +142,7 @@ If no document or decision is found in the conversation window, return: {"decisi
             needsMoreDiscussion: Boolean(decision.needsMoreDiscussion),
           };
         })
-        .filter((decision) => decision && decision.title && decision.confidence >= 0.7);
+        .filter((decision) => decision && decision.title && decision.confidence >= 0.5);
 
       console.log(`[DECISION EXTRACTION] ✅ Extracted ${normalized.length} decision candidate(s) from ${decisions.length} detected`);
 

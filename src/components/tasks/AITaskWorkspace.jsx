@@ -1241,6 +1241,7 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
   const removeDocument = useTaskStore(state => state.removeDocument);
   const upsertNote = useTaskStore(state => state.upsertNote);
   const removeNote = useTaskStore(state => state.removeNote);
+  const setGeneratingTask = useTaskStore(state => state.setGeneratingTask);
 
   // Handle permanent hard deletion of items confirmed by user
   const handleConfirmPermanentDelete = useCallback(() => {
@@ -1339,6 +1340,16 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
     socket.on('note_updated', handleNoteUpdated);
     socket.on('note_deleted', handleNoteDeleted);
 
+    // AI processing indicators (server emits these around Gemini calls)
+    const handleTaskGenerationStatus = ({ status }) => {
+      setGeneratingTask(status === 'generating');
+    };
+    const handleDecisionAnalysisStatus = ({ status }) => {
+      setGeneratingTask(status === 'generating');
+    };
+    socket.on('task_generation_status', handleTaskGenerationStatus);
+    socket.on('decision_analysis_status', handleDecisionAnalysisStatus);
+
     return () => {
       socket.off('task_created', handleTaskCreated);
       socket.off('task_updated', handleTaskUpdated);
@@ -1351,8 +1362,11 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
       socket.off('note_created', handleNoteCreated);
       socket.off('note_updated', handleNoteUpdated);
       socket.off('note_deleted', handleNoteDeleted);
+
+      socket.off('task_generation_status', handleTaskGenerationStatus);
+      socket.off('decision_analysis_status', handleDecisionAnalysisStatus);
     };
-  }, [socket, roomId, setTasks, setDocuments, setNotes, upsertTask, removeTask, upsertDocument, removeDocument, upsertNote, removeNote]);
+  }, [socket, roomId, setTasks, setDocuments, setNotes, upsertTask, removeTask, upsertDocument, removeDocument, upsertNote, removeNote, setGeneratingTask]);
 
   // ── Reset state on room change ───────────────────────────
   useEffect(() => {

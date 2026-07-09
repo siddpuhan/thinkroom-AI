@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef, useContext, lazy, Suspense, useCallback } from 'react';
 import { io } from 'socket.io-client';
-import { useUser as useAuth0User, getAccessToken } from '@auth0/nextjs-auth0/client';
+import { useUser, useSupabase } from '@/components/SupabaseProvider';
 import MessageBubble from '../MessageBubble';
 import AnimatedBackground from '../AnimatedBackground';
 import { fetchMessagesApi, sendMessageApi } from '../api/messagesApi';
@@ -12,6 +12,7 @@ import ThemeContext from '../context/ThemeContext';
 import { useChatStore } from '../store/chatStore';
 import ChatInput from './chat/ChatInput';
 import { WorkspaceToggleButton } from './tasks/WorkspaceToggleButton';
+import { logout } from '@/app/actions';
 
 const AITaskWorkspace = lazy(() =>
   import('./tasks/AITaskWorkspace.jsx').then((module) => ({
@@ -82,7 +83,8 @@ const StatusBadge = ({ mode }) => {
 
 export default function ChatPage() {
   console.count("[RENDER] ChatPage");
-  const { user } = useAuth0User();
+  const { user } = useSupabase();
+  const { supabase } = useSupabase();
   
 const { theme, toggleTheme } = useContext(ThemeContext);
   
@@ -91,25 +93,26 @@ const { theme, toggleTheme } = useContext(ThemeContext);
   const appendStreamChunk = useChatStore(state => state.appendStreamChunk);
   const finalizeStream = useChatStore(state => state.finalizeStream);
   
-  const currentUserId = user?.sub || user?.id;
+  const currentUserId = user?.id;
   const currentUserIdRef = useRef(currentUserId);
   const currentUserNameRef = useRef('Anonymous');
   const currentUserEmailRef = useRef(null);
 
   useEffect(() => {
     if (user) {
-      currentUserIdRef.current = user.sub || user.id;
+      currentUserIdRef.current = user.id;
       currentUserNameRef.current = 
-        user.name || 
-        user.username || 
+        user.user_metadata?.full_name || 
+        user.user_metadata?.name || 
         user.email || 
         'Anonymous';
       currentUserEmailRef.current = user.email || null;
+      const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
 
-      // Sync user to Supabase users table
       const syncUserToDB = async () => {
         try {
-          const token = await getAccessToken().catch(() => null);
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token ?? null;
           await fetch(`${API_BASE_URL}/api/users/sync`, {
             method: 'POST',
             headers: {
@@ -117,9 +120,10 @@ const { theme, toggleTheme } = useContext(ThemeContext);
               'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-              id: user.sub || user.id,
+              id: user.id,
               name: currentUserNameRef.current,
-              email: currentUserEmailRef.current
+              email: currentUserEmailRef.current,
+              avatarUrl
             })
           });
         } catch (error) {
@@ -128,7 +132,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       };
        syncUserToDB();
      }
-  }, [user]);
+  }, [user, supabase]);
 
      const [messages, setMessages] = useState([]);
 
@@ -225,7 +229,8 @@ const { theme, toggleTheme } = useContext(ThemeContext);
   useEffect(() => {
     let socket;
     const initSocket = async () => {
-      const token = await getAccessToken().catch(() => null);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? null;
       socket = io(SOCKET_URL, { auth: { token } });
       socketRef.current = socket;
 
@@ -271,7 +276,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
         setSocketInstance(null);
       }
     };
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -373,7 +378,8 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       setLoadingMessages(true);
       setMessageError('');
       try {
-        const token = await getAccessToken().catch(() => null);
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token ?? null;
         const allMessages = await fetchMessagesApi(token, activeRoom);
         setMessages((prev) => mergeMessages(allMessages, prev));
       } catch (error) {
@@ -387,7 +393,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       }
     }
     fetchMessages();
-  }, [activeRoom, scrollToBottom]);
+  }, [activeRoom, scrollToBottom, supabase]);
 
   useEffect(() => {
     const syncOfflineMessages = async () => {
@@ -403,7 +409,8 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       isSyncingOfflineRef.current = true;
       const remainingMessages = [];
 
-      const token = await getAccessToken().catch(() => null);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? null;
       for (const queuedMessage of queuedMessages) {
         try {
           const savedMessage = await sendMessageApi(
@@ -432,7 +439,8 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       }
 
       try {
-        const token = await getAccessToken().catch(() => null);
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token ?? null;
         const allMessages = await fetchMessagesApi(token, activeRoomRef.current);
         const pendingMsgs = getOfflineMessages(activeRoomRef.current);
         setMessages((prevMessages) => mergeMessages(allMessages, [...prevMessages, ...pendingMsgs]));
@@ -444,7 +452,7 @@ const { theme, toggleTheme } = useContext(ThemeContext);
     };
 
     syncOfflineMessages();
-  }, [isOnline]);
+  }, [isOnline, supabase]);
 
   useEffect(() => {
     scrollToBottom(false);
@@ -480,7 +488,8 @@ const { theme, toggleTheme } = useContext(ThemeContext);
 
     if (mode === 'server') {
       try {
-        const token = await getAccessToken().catch(() => null);
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token ?? null;
         const savedMessage = await sendMessageApi(
           textToSend,
           currentUserIdRef.current || user?.id,
@@ -583,7 +592,11 @@ const { theme, toggleTheme } = useContext(ThemeContext);
          <h1>ThinkRoom AI {activeRoom ? `- Room: ${activeRoom}` : '- Global Chat'}</h1>
          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
            <NetworkStatus queuedCount={queuedCount} />
-           <a href="/auth/logout" className="chat-button-subtle" style={{ textDecoration: 'none', color: 'inherit' }} title="Sign Out">Sign Out</a>
+            <form action={logout}>
+              <button type="submit" className="chat-button-subtle" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }} title="Sign Out">
+                Sign Out
+              </button>
+            </form>
            <button 
              onClick={toggleTheme}
              className="chat-button-subtle"

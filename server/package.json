@@ -10,16 +10,13 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@types/jsonwebtoken": "^9.0.10",
+    "@google/generative-ai": "^0.21.0",
+    "@supabase/supabase-js": "^2.39.0",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
-    "express-oauth2-jwt-bearer": "^1.9.1",
-    "@google/generative-ai": "^0.21.0",
     "helmet": "^8.2.0",
-    "jsonwebtoken": "^9.0.3",
-    "jwks-rsa": "^4.1.0",
     "openai": "^6.37.0",
     "pg": "^8.20.0",
     "pino": "^10.3.1",

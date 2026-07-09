@@ -1,31 +1,33 @@
 import React from 'react';
-import { Auth0Provider } from '@auth0/nextjs-auth0/client';
-import { auth0 } from '../lib/auth0';
-import { ThemeProvider } from '../context/ThemeContext'
-import './globals.css'
-import '../App.css'
+import { SupabaseProvider } from "../components/SupabaseProvider";
+import { createClient } from "../lib/supabase-server";
+import { ThemeProvider } from "../context/ThemeContext";
+
+import "./globals.css";
+import "../App.css";
 
 export const metadata = {
-  title: 'ThinkRoom AI',
-  description: 'AI Workspace and Chat',
-}
+  title: "ThinkRoom AI",
+  description: "AI Workspace and Chat",
+};
 
 export default async function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  const session = await auth0.getSession();
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
 
   return (
     <html lang="en">
       <body>
-        <Auth0Provider user={session?.user}>
+        <SupabaseProvider initialSession={session}>
           <ThemeProvider>
             {children}
           </ThemeProvider>
-        </Auth0Provider>
+        </SupabaseProvider>
       </body>
     </html>
-  )
+  );
 }

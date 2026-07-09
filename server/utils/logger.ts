@@ -1,6 +1,4 @@
 // Logger utility for ThinkRoom AI Backend
-import dotenv from 'dotenv';
-dotenv.config();
 
 const LOG_LEVELS = {
   debug: 0,

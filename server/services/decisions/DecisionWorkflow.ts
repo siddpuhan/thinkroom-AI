@@ -3,10 +3,10 @@ import { DecisionPrefilter } from '../ai/DecisionPrefilter.js';
 import { GeminiDecisionExtraction } from '../ai/GeminiDecisionExtraction.js';
 import { DocumentService } from '../documents/DocumentService.js';
 
-const FINALIZATION_WINDOW_MS = 18_000;
-const MIN_CONFIDENCE = 0.85;
-const MIN_PARTICIPANTS = 2;
-const MIN_MESSAGES_AFTER_CANDIDATE = 3;
+const FINALIZATION_WINDOW_MS = 15_000;
+const MIN_CONFIDENCE = 0.6;
+const MIN_PARTICIPANTS = 1;
+const MIN_MESSAGES_AFTER_CANDIDATE = 1;
 
 const roomState = new Map();
 

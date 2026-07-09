@@ -32,6 +32,17 @@ export class NotesPrefilter {
       }
     }
 
-    return { shouldAnalyze: matchedTypes.length > 0, matchedTypes, matchedPhrases };
+    // Keyword matches are used only as hints for the LLM. We do NOT gate the
+    // pipeline on them: any substantive message is forwarded to Gemini, which
+    // makes the final call on whether something is note-worthy. This keeps
+    // note extraction consistent instead of missing messages that lack an
+    // exact trigger word.
+    const isSubstantive = normalizedText.split(/\s+/).length >= 2 && normalizedText.length >= 8;
+
+    return {
+      shouldAnalyze: matchedTypes.length > 0 || isSubstantive,
+      matchedTypes,
+      matchedPhrases,
+    };
   }
 }

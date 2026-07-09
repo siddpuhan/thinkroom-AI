@@ -1,15 +1,83 @@
 "use client";
-
-import { useRouter } from 'next/navigation';
-import LandingPage from '../LandingPage';
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSupabase } from "../components/SupabaseProvider";
+import LandingPage from "../LandingPage";
 
 export default function Home() {
   const router = useRouter();
-  
+  const { session, supabase } = useSupabase();
+
+  useEffect(() => {
+    if (session) router.replace("/chat");
+  }, [session, router]);
+
+  const [emailMode, setEmailMode] = useState<"login" | "signup" | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const googleAuth = async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (!error && data.url) window.location.assign(data.url);
+  };
+
+  const emailAuth = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError("");
+    const auth = emailMode === "signup"
+      ? supabase.auth.signUp
+      : supabase.auth.signInWithPassword;
+    const { error: err } = await auth({ email, password });
+    if (err) { setError(err.message); return; }
+    router.replace("/chat");
+  };
+
+  if (emailMode) {
+    return (
+      <div style={{
+        minHeight: "100vh", background: "#000",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: "16px"
+      }}>
+        <form onSubmit={emailAuth} style={{ width: "100%", maxWidth: "360px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <h2 style={{ color: "white", margin: 0 }}>
+            {emailMode === "login" ? "Sign In" : "Create Account"}
+          </h2>
+          <input
+            type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com" required
+            style={{ padding: "12px", borderRadius: "8px", background: "#111", color: "white", border: "1px solid #333" }}
+          />
+          <input
+            type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••" required minLength={6}
+            style={{ padding: "12px", borderRadius: "8px", background: "#111", color: "white", border: "1px solid #333" }}
+          />
+          <button type="submit" style={{ padding: "12px", borderRadius: "8px", background: "white", color: "black", fontWeight: 600 }}>
+            {emailMode === "login" ? "Sign In" : "Sign Up"}
+          </button>
+          <button type="button" onClick={googleAuth} style={{ color: "#ccc", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}>
+            Or use Google
+          </button>
+          <button type="button" onClick={() => setEmailMode(emailMode === "login" ? "signup" : "login")} style={{ color: "#ccc", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}>
+            {emailMode === "login" ? "Need an account? Sign up" : "Have an account? Sign in"}
+          </button>
+          <button type="button" onClick={() => { setError(""); setEmailMode(null); }} style={{ color: "#888", background: "none", border: "none", cursor: "pointer" }}>
+            ← Back
+          </button>
+          {error && <p style={{ color: "#f87171", fontSize: "0.85rem" }}>{error}</p>}
+        </form>
+      </div>
+    );
+  }
+
   return (
-    <LandingPage 
-      onEnterChat={() => router.push('/chat')}
-      onEnterResources={() => router.push('/resources')}
+    <LandingPage
+      onEnterChat={googleAuth}
+      onEnterResources={() => setEmailMode("signup")}
     />
   );
 }

@@ -4,7 +4,7 @@ export const createMessage = async (req, res) => {
   try {
     console.log('Incoming message payload:', req.body);
     const { id, text, sender_id, sender_name, room_id } = req.body;
-    const userId = req.auth?.userId || sender_id;
+    const userId = (req as any).user?.id || sender_id;
 
     const trimmedText = typeof text === 'string' ? text.trim() : '';
     if (!trimmedText) {

@@ -12,7 +12,8 @@
     "start": "next start"
   },
   "dependencies": {
-    "@auth0/nextjs-auth0": "^4.24.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "@supabase/ssr": "^0.5.0",
     "framer-motion": "^12.38.0",
     "highlight.js": "^11.11.1",
     "idb": "^7.1.1",

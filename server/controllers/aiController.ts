@@ -1,8 +1,5 @@
 import { googleAI } from "../utils/geminiClient.js";
 import { getDB } from "../config/db.js";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 export const processThinkRoomAI = async (roomId, userQuestion, io) => {
   const pool = getDB();
