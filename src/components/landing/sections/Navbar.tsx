@@ -1,8 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import MagneticButton from "../ui/MagneticButton";
-import { LogoHorizontal } from "../ui/Logo";
 
 const navItems = [
   { label: "Product", href: "#product" },
@@ -15,12 +13,13 @@ export default function Navbar({ onSignIn, onGetStarted }: { onSignIn?: () => vo
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("product");
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   const linkRefs = useRef<(HTMLAnchorElement | null)[]>([]);
+  const [logoHovered, setLogoHovered] = useState(false);
+  const [ctaHovered, setCtaHovered] = useState(false);
 
   useEffect(() => {
     const onScroll = () => {
-      setScrolled(window.scrollY > 30);
+      setScrolled(window.scrollY > 40);
       const ids = navItems.map((i) => i.href.slice(1));
       for (const id of ids.reverse()) {
         const el = document.getElementById(id);
@@ -38,161 +37,201 @@ export default function Navbar({ onSignIn, onGetStarted }: { onSignIn?: () => vo
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  useEffect(() => {
-    const idx = navItems.findIndex((i) => i.href.slice(1) === activeSection);
-    const el = linkRefs.current[idx];
-    if (el) {
-      const parent = el.parentElement;
-      if (parent) {
-        const parentRect = parent.getBoundingClientRect();
-        const elRect = el.getBoundingClientRect();
-        setIndicatorStyle({
-          left: elRect.left - parentRect.left + elRect.width / 2 - 4,
-          width: 8,
-        });
-      }
-    }
-  }, [activeSection]);
-
   const isActive = (href: string) => activeSection === href.slice(1);
 
   return (
     <motion.header
-      initial={{ y: -20, opacity: 0 }}
+      initial={{ y: -24, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-32px)] md:w-[85%] max-w-[1280px]"
+      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+      className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-48px)] max-w-[1400px]"
     >
-      <motion.div
+      <motion.nav
         animate={{
-          height: scrolled ? 52 : 58,
+          height: scrolled ? 64 : 72,
           boxShadow: scrolled
-            ? "0 3px 0 0 #1A1A1A, 0 8px 24px rgba(0,0,0,0.06)"
-            : "0 5px 0 0 #1A1A1A",
+            ? "0 8px 32px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06)"
+            : "0 4px 16px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
         }}
-        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-        className={`rounded-[26px] border-3 border-ink transition-all duration-250 ${
-          scrolled
-            ? "bg-white/85 backdrop-blur-xl"
-            : "bg-white"
-        }`}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        className="flex items-center justify-between w-full h-full px-8 md:px-10 rounded-[999px]"
+        style={{
+              background: "#B084D7",
+          border: "1.5px solid rgba(26, 26, 26, 0.15)",
+          boxShadow: scrolled
+            ? "0 8px 32px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.6)"
+            : "0 4px 16px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)",
+        }}
       >
-        <div className="flex items-center justify-between h-full px-5 md:px-7">
-          <a href="#" className="flex items-center flex-shrink-0">
-            <LogoHorizontal size="sm" />
-          </a>
-
-          <nav className="hidden md:flex items-center gap-10 lg:gap-14 relative">
-            {navItems.map((item, i) => (
-              <a
-                key={item.href}
-                ref={(el) => { linkRefs.current[i] = el; }}
-                href={item.href}
-                className={`group relative text-[13px] font-semibold tracking-[-0.01em] py-1 transition-all duration-250 ${
-                  isActive(item.href)
-                    ? "text-ink"
-                    : "text-ink-muted hover:text-ink"
-                }`}
-              >
-                {item.label}
-                <span
-                  className={`absolute left-0 right-0 bottom-0 h-[2px] bg-accent-purple rounded-full origin-left transition-transform duration-250 ease-out ${
-                    isActive(item.href) ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
-                  }`}
-                />
-              </a>
-            ))}
-            <motion.div
-              animate={indicatorStyle}
-              transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              className="absolute -bottom-[11px] h-[6px] w-[8px] bg-accent-purple"
-              style={{ borderRadius: "50%" }}
-            />
-          </nav>
-
-          <div className="hidden md:flex items-center gap-3">
-            <MagneticButton onClick={onSignIn}
-              variant="secondary"
-              className="!text-[12.5px] !px-[18px] !py-[7px] !font-semibold !border-2 !shadow-[0_2px_0_0_#1A1A1A] !rounded-xl"
-            >
-              Sign in
-            </MagneticButton>
-            <MagneticButton onClick={onGetStarted}
-              variant="primary"
-              className="!text-[13px] !px-[22px] !py-[8px] !font-bold !rounded-xl"
-            >
-              Start Collaborating
-            </MagneticButton>
-          </div>
-
-          <button
-            aria-label="Menu"
-            className="md:hidden w-9 h-9 rounded-xl border-2 border-ink bg-white flex items-center justify-center flex-shrink-0"
-            onClick={() => setMobileOpen(!mobileOpen)}
+        {/* Logo */}
+        <a
+          href="#"
+          className="flex items-center gap-3 flex-shrink-0 group outline-none focus:outline-none"
+          onMouseEnter={() => setLogoHovered(true)}
+          onMouseLeave={() => setLogoHovered(false)}
+        >
+          <motion.div
+            animate={{ rotate: logoHovered ? -6 : 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="w-5 h-5 md:w-6 md:h-6 rounded-[8px] bg-[#1A1A1A] flex items-center justify-center flex-shrink-0"
           >
-            <div className="w-4 h-3.5 flex flex-col justify-between">
+            <span className="text-[#B084D7] text-[11px] md:text-[13px] font-bold">T</span>
+          </motion.div>
+          <span className="text-[17px] md:text-[19px] font-bold tracking-[-0.03em] text-[#1A1A1A]">
+            ThinkRoom
+            <span className="text-[#1A1A1A]/50 text-[13px] md:text-[15px] font-semibold ml-[2px]">AI</span>
+          </span>
+        </a>
+
+        {/* Desktop Nav */}
+        <nav className="hidden md:flex items-center gap-1 relative h-full">
+          {navItems.map((item, i) => (
+            <a
+              key={item.href}
+              ref={(el) => { linkRefs.current[i] = el; }}
+              href={item.href}
+              className="group relative px-4 py-1.5 rounded-full text-sm font-medium tracking-[-0.01em] transition-all duration-250 outline-none focus:outline-none"
+              style={{
+                color: isActive(item.href) ? "#1A1A1A" : "rgba(26, 26, 26, 0.55)",
+              }}
+            >
+              {isActive(item.href) && (
+                <motion.span
+                  layoutId="navPill"
+                  className="absolute inset-0 rounded-full"
+                  style={{ background: "rgba(26, 26, 26, 0.07)" }}
+                  transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                />
+              )}
+              <span className="relative z-[1] block group-hover:-translate-y-[1.5px] transition-transform duration-200">
+                {item.label}
+              </span>
               <span
-                className={`block h-[2px] bg-ink rounded-full transition-all duration-250 ${
-                  mobileOpen ? "rotate-45 translate-y-[5px]" : ""
-                }`}
+                className="absolute left-1/2 bottom-[2px] h-[2px] rounded-full -translate-x-1/2 transition-all duration-250"
+                style={{
+                  background: "rgba(26, 26, 26, 0.3)",
+                  width: isActive(item.href) ? "0" : "0",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive(item.href)) {
+                    e.currentTarget.style.width = "60%";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive(item.href)) {
+                    e.currentTarget.style.width = "0";
+                  }
+                }}
               />
-              <span
-                className={`block h-[2px] bg-ink rounded-full transition-all duration-250 ${
-                  mobileOpen ? "opacity-0" : ""
-                }`}
-              />
-              <span
-                className={`block h-[2px] bg-ink rounded-full transition-all duration-250 ${
-                  mobileOpen ? "-rotate-45 -translate-y-[6px]" : ""
-                }`}
-              />
-            </div>
+            </a>
+          ))}
+        </nav>
+
+        {/* Desktop CTA */}
+        <div className="hidden md:flex items-center gap-4">
+          <button
+            onClick={onSignIn}
+            className="text-sm font-semibold text-[rgba(26,26,26,0.55)] px-5 py-2 rounded-full transition-all duration-200 outline-none focus:outline-none hover:text-[#1A1A1A] hover:bg-[rgba(26,26,26,0.06)] hover:-translate-y-[1px] active:translate-y-0"
+          >
+            Sign in
           </button>
+          <motion.button
+            onClick={onGetStarted}
+            onMouseEnter={() => setCtaHovered(true)}
+            onMouseLeave={() => setCtaHovered(false)}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.98 }}
+            className="text-sm font-semibold text-[#1A1A1A] px-[22px] py-[10px] rounded-full transition-all duration-200 outline-none focus:outline-none"
+            style={{
+              background: "#FEFCF3",
+              boxShadow: ctaHovered
+                ? "0 4px 16px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)"
+                : "0 1px 4px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.8)",
+            }}
+          >
+            <span className="flex items-center gap-[6px]">
+              Start Collaborating
+              <motion.svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                className="mt-[1px]"
+                animate={{ x: ctaHovered ? 4 : 0 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <path d="M1 7H13M13 7L7 1M13 7L7 13" stroke="#1A1A1A" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </motion.svg>
+            </span>
+          </motion.button>
         </div>
 
-        <AnimatePresence>
-          {mobileOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="md:hidden border-t-2 border-ink overflow-hidden"
-            >
-              <div className="px-6 py-4 flex flex-col gap-2">
-                {navItems.map((item) => (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`text-[14px] font-semibold px-3 py-2 rounded-xl transition-colors duration-200 ${
-                      isActive(item.href)
-                        ? "text-ink bg-pastel-purple"
-                        : "text-ink-soft hover:text-ink hover:bg-paper"
-                    }`}
-                  >
-                    {item.label}
-                  </a>
-                ))}
-                <div className="pt-3 mt-2 border-t-2 border-ink/10 flex flex-col gap-2">
-                  <MagneticButton onClick={onSignIn}
-                    variant="secondary"
-                    className="flex-1 !justify-center !text-[13px] !border-2 !rounded-xl"
-                  >
-                    Sign in
-                  </MagneticButton>
-                  <MagneticButton onClick={onGetStarted}
-                    variant="primary"
-                    className="flex-1 !justify-center !text-[13px] !rounded-xl"
-                  >
-                    Start Collaborating
-                  </MagneticButton>
-                </div>
+        {/* Mobile hamburger */}
+        <button
+          aria-label="Menu"
+          className="md:hidden w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-colors duration-200 outline-none focus:outline-none hover:bg-[rgba(26,26,26,0.06)]"
+          onClick={() => setMobileOpen(!mobileOpen)}
+        >
+          <div className="w-[18px] h-3.5 flex flex-col justify-between">
+            <span className={`block h-[2px] rounded-full bg-[#1A1A1A] transition-all duration-250 ${mobileOpen ? "rotate-45 translate-y-[5.5px]" : ""}`} />
+            <span className={`block h-[2px] rounded-full bg-[#1A1A1A] transition-all duration-250 ${mobileOpen ? "opacity-0" : ""}`} />
+            <span className={`block h-[2px] rounded-full bg-[#1A1A1A] transition-all duration-250 ${mobileOpen ? "-rotate-45 -translate-y-[6.5px]" : ""}`} />
+          </div>
+        </button>
+      </motion.nav>
+
+      {/* Mobile menu */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.97 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="md:hidden mt-2 rounded-[24px] overflow-hidden"
+            style={{
+          background: "#B084D7",
+              border: "1.5px solid rgba(26, 26, 26, 0.15)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.08)",
+            }}
+          >
+            <div className="px-5 py-4 flex flex-col gap-1">
+              {navItems.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className="text-sm font-medium px-3 py-2.5 rounded-xl transition-colors duration-200 outline-none focus:outline-none"
+                  style={{
+                    color: isActive(item.href) ? "#1A1A1A" : "rgba(26,26,26,0.55)",
+                    background: isActive(item.href) ? "rgba(26,26,26,0.07)" : "transparent",
+                  }}
+                >
+                  {item.label}
+                </a>
+              ))}
+              <div className="pt-3 mt-2 border-t border-[rgba(26,26,26,0.08)] flex flex-col gap-2">
+                <button
+                  onClick={onSignIn}
+                  className="text-sm font-semibold py-2.5 px-3 rounded-xl text-[rgba(26,26,26,0.55)] hover:text-[#1A1A1A] transition-colors duration-200 text-left outline-none focus:outline-none"
+                >
+                  Sign in
+                </button>
+                <button
+                  onClick={onGetStarted}
+                  className="text-sm font-semibold text-[#1A1A1A] py-3 px-4 rounded-xl text-center transition-all duration-200 outline-none focus:outline-none"
+                  style={{
+                    background: "#FEFCF3",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+                  }}
+                >
+                  Start Collaborating
+                </button>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.header>
   );
 }
