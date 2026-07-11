@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node --loader ts-node/esm index.ts",
-    "dev": "nodemon --exec \"node --loader ts-node/esm index.ts\"",
+    "dev": "nodemon -e ts,js,json --exec \"node --loader ts-node/esm index.ts\"",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +16,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
+    "groq-sdk": "^1.3.0",
     "helmet": "^8.2.0",
     "openai": "^6.37.0",
     "pg": "^8.20.0",

@@ -1,4 +1,5 @@
 import { getDB } from '../../config/db.js';
+import { logger } from '../../utils/logger.js';
 
 const pool = getDB();
 
@@ -8,20 +9,34 @@ export class NotesService {
       `INSERT INTO notes (room_id, type, title, content, confidence, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [roomId, type, title, content || title, confidence || 0.7, createdBy || 'AI_SYSTEM']
     );
+    logger.info("NOTE", JSON.stringify({ stage: "NOTE_CREATED", roomId, noteId: result.rows[0].id, type }));
     return result.rows[0];
   }
 
   static async getByRoom(roomId) {
     const result = await pool.query(`SELECT * FROM notes WHERE room_id = $1 ORDER BY created_at DESC`, [roomId]);
+    logger.info("NOTE", JSON.stringify({ stage: "NOTES_FETCHED", roomId, count: result.rows.length }));
     return result.rows;
   }
 
-  static async isDuplicate(roomId, type, title) {
+  static async isDuplicate(roomId, type, content) {
+    // Normalize content for comparison: lowercase, trim, remove extra whitespace
+    const normalizedContent = content.toLowerCase().trim().replace(/\s+/g, ' ').substring(0, 200);
+    
     const result = await pool.query(
-      `SELECT id FROM notes WHERE room_id = $1 AND type = $2 AND title = $3 AND deleted_at IS NULL AND created_at > NOW() - INTERVAL '10 minutes' LIMIT 1`,
-      [roomId, type, title]
+      `SELECT id FROM notes 
+       WHERE room_id = $1 
+       AND type = $2 
+       AND LOWER(TRIM(REGEXP_REPLACE(content, '\\s+', ' ', 'g'))) = $3
+       AND deleted_at IS NULL 
+       LIMIT 1`,
+      [roomId, type, normalizedContent]
     );
-    return result.rows.length > 0;
+    const isDup = result.rows.length > 0;
+    if (isDup) {
+      logger.info("NOTE", JSON.stringify({ stage: "DUPLICATE_SKIPPED", roomId, type, contentPreview: content.substring(0, 50) }));
+    }
+    return isDup;
   }
 
   static async softDelete(noteId) {

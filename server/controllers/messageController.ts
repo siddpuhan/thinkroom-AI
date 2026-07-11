@@ -1,8 +1,19 @@
 import { getDB } from "../config/db.js";
+import { AIWorker } from "../services/ai/AIWorker.js";
+import { Server } from "socket.io";
+
+interface MessageRow {
+  id: string;
+  text: string;
+  sender_id: string | null;
+  sender_name: string;
+  room_id: string | null;
+  created_at: Date;
+}
 
 export const createMessage = async (req, res) => {
   try {
-    console.log('Incoming message payload:', req.body);
+    console.log('[CHAT] Incoming message payload:', req.body);
     const { id, text, sender_id, sender_name, room_id } = req.body;
     const userId = (req as any).user?.id || sender_id;
 
@@ -36,15 +47,33 @@ export const createMessage = async (req, res) => {
     }
     
     const result = await pool.query(query, values);
-    let newMessage = result.rows[0];
+    let newMessage = (result.rows[0] as unknown) as MessageRow | undefined;
 
-    console.log(`[PIPELINE:LOG] MESSAGE_SAVED | ID: ${(newMessage as any)?.id || id} | Status: Saved to DB`);
+    console.log(`[DB] MESSAGE_SAVED | ID: ${newMessage?.id || id} | Room: ${finalRoomId} | Status: Saved to DB`);
 
     if (!newMessage && id) {
       const fetchQuery = `SELECT id, text, sender_id, sender_name, room_id, created_at FROM messages WHERE id = $1`;
       const fetchResult = await pool.query(fetchQuery, [id]);
-      newMessage = fetchResult.rows[0];
+      newMessage = fetchResult.rows[0] as MessageRow | undefined;
       return res.status(200).json({ success: true, data: newMessage });
+    }
+
+    if (!newMessage) {
+      return res.status(500).json({ success: false, message: 'Failed to create message' });
+    }
+
+    // Unified AI Pipeline: enqueue message for AI processing (same as Socket.IO path)
+    const io: Server = req.app.get('io');
+    if (io && finalRoomId && newMessage) {
+      console.log('[PIPELINE] Enqueueing message for AI processing via REST path');
+      AIWorker.enqueueMessage(finalRoomId, {
+        id: newMessage.id,
+        text: trimmedText,
+        sender_name: fallbackSenderName,
+        user_id: userId || null
+      }, io);
+    } else {
+      console.log('[PIPELINE] Skipping AI enqueue - no io, roomId, or message');
     }
 
     return res.status(201).json({ success: true, data: newMessage });

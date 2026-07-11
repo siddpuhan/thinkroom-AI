@@ -1,4 +1,4 @@
-import { googleAI, withRetry } from "../../utils/geminiClient.js";
+import { groq, withGroqRetry } from "../../utils/groqClient.js";
 import { logger } from "../../utils/logger.js";
 import { ConversationBuffer } from "../ai/ConversationBuffer.js";
 import { DocumentService } from "../documents/DocumentService.js";
@@ -7,9 +7,9 @@ export class SummaryBuilder {
   static async generateSummary(roomId, summaryType, requestorName) {
     logger.info("SUMMARY_BUILDER", `🚀 Starting summary generation. Type: ${summaryType}, Room: ${roomId}`);
 
-    if (!googleAI) {
-      logger.error("SUMMARY_BUILDER", "Gemini API is not configured.");
-      throw new Error("Gemini API is not configured.");
+    if (!groq) {
+      logger.error("SUMMARY_BUILDER", "Groq API client is not configured.");
+      throw new Error("Groq API client is not configured.");
     }
 
     const messageWindow = ConversationBuffer.getWindow(roomId);
@@ -61,30 +61,27 @@ Focus on: Messages missed, tasks assigned, decisions finalized, important discus
     }
 
     try {
-      logger.info("SUMMARY_BUILDER", `📡 Calling Gemini API (model: gemini-2.5-flash)...`);
-      
-      const model = googleAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
-        generationConfig: {
-          responseMimeType: "application/json",
-        }
-      });
+      logger.info("SUMMARY_BUILDER", `📡 Calling Groq API (model: llama-3.3-70b-versatile)...`);
 
-      const response = await withRetry(() => model.generateContent({
-        contents: [
-          { role: "user", parts: [{ text: `${systemPrompt}\n\nConversation:\n${conversationText}` }] }
-        ]
+      const completion = await withGroqRetry(() => groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Conversation:\n${conversationText}` }
+        ],
+        temperature: 0.1,
+        response_format: { type: "json_object" }
       }));
 
-      const rawJson = response.response.text();
+      const rawJson = completion.choices[0]?.message?.content || "";
       if (!rawJson) {
-        throw new Error("Empty response from Gemini");
+        throw new Error("Empty response from Groq");
       }
 
       const parsed = JSON.parse(rawJson);
       
       if (!parsed.title || !parsed.content) {
-        throw new Error("Invalid response format from Gemini. Missing title or content.");
+        throw new Error("Invalid response format from Groq. Missing title or content.");
       }
 
       const contentObj = {
@@ -102,7 +99,7 @@ Focus on: Messages missed, tasks assigned, decisions finalized, important discus
           summary: parsed.content.substring(0, 200) + '...',
           content: JSON.stringify(contentObj),
           participants: parsed.participants || [],
-          sourceMessages: [],
+          source_messages: [],
           confidence: 0.9,
         });
         logger.info("SUMMARY_BUILDER", `🔄 Updated existing recent summary ${savedDocument.id}`);
@@ -129,4 +126,3 @@ Focus on: Messages missed, tasks assigned, decisions finalized, important discus
     }
   }
 }
-

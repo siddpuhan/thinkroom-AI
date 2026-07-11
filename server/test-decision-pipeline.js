@@ -2,7 +2,7 @@ import { io } from "socket.io-client";
 
 console.log("=== Shadow AI Decision Test ===");
 
-const socket = io("http://localhost:5000", { transports: ["websocket"] });
+const socket = io("http://localhost:5000", { transports: ["websocket"], auth: { token: "mock-development-token" } });
 
 socket.on("connect", () => {
   console.log("✅ Connected");

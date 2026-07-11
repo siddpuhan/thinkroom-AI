@@ -108,11 +108,16 @@ export class DocumentService {
    * Prevent duplicate documents — check if a document with similar title exists in last 10 minutes.
    */
   static async isDuplicate(roomId, title) {
+    const normalizedTitle = title.toLowerCase().trim().replace(/\s+/g, ' ');
     const result = await pool.query(
-      `SELECT id FROM documents WHERE room_id = $1 AND title = $2 AND created_at > NOW() - INTERVAL '10 minutes' AND deleted_at IS NULL LIMIT 1`,
-      [roomId, title]
+      `SELECT id FROM documents WHERE room_id = $1 AND LOWER(TRIM(title)) = $2 AND created_at > NOW() - INTERVAL '10 minutes' AND deleted_at IS NULL LIMIT 1`,
+      [roomId, normalizedTitle]
     );
-    return result.rows.length > 0;
+    const isDup = result.rows.length > 0;
+    if (isDup) {
+      console.log(`[DOC SERVICE] ⏭️ Skipped duplicate document: "${title}"`);
+    }
+    return isDup;
   }
 
   /**

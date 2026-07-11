@@ -186,13 +186,15 @@ const { theme, toggleTheme } = useContext(ThemeContext);
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
 
+  const lastRoomRef = useRef('');
   useEffect(() => {
-    if (activeRoom) {
-      setTimeout(() => {
-        scrollToBottom(true);
-      }, 100);
+    if (!loadingMessages && messages.length > 0) {
+      if (activeRoom !== lastRoomRef.current) {
+        lastRoomRef.current = activeRoom;
+        setTimeout(() => scrollToBottom(true), 50);
+      }
     }
-  }, [activeRoom, scrollToBottom]);
+  }, [messages.length, loadingMessages, activeRoom, scrollToBottom]);
 
   useEffect(() => {
     const handleKeyDown = async (e) => {
@@ -217,13 +219,13 @@ const { theme, toggleTheme } = useContext(ThemeContext);
   }, [showMemoryDebug, activeRoom]);
 
    useEffect(() => {
-     const savedRoom = (typeof window !== "undefined" ? localStorage.getItem.bind(localStorage) : () => null)("roomId");
-     if (savedRoom) {
-       setRoomInput(savedRoom);
-       setActiveRoom(savedRoom);
-       activeRoomRef.current = savedRoom;
-     }
-   }, []);
+      const savedRoom = localStorage.getItem("roomId");
+      if (savedRoom) {
+        setRoomInput(savedRoom);
+        setActiveRoom(savedRoom);
+        activeRoomRef.current = savedRoom;
+      }
+    }, []);
 
 
   useEffect(() => {
@@ -231,35 +233,41 @@ const { theme, toggleTheme } = useContext(ThemeContext);
     const initSocket = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token ?? null;
-      socket = io(SOCKET_URL, { auth: { token } });
+      socket = io(SOCKET_URL, {
+        auth: { token },
+        transports: ['websocket'],
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000
+      });
       socketRef.current = socket;
 
       socket.on('connect', () => {
+        console.log('[SOCKET] Connected:', socket.id);
+        setSocketInstance(socket); // expose live socket to child components
+        // Re-join room on every connect/reconnect
+        if (activeRoomRef.current) {
+          socket.emit('join-room', activeRoomRef.current);
+          console.log('[SOCKET] Re-joined room on connect:', activeRoomRef.current);
+        }
+      });
 
-      console.log('[SOCKET] Connected:', socket.id);
-      setSocketInstance(socket); // expose live socket to child components
-      if (activeRoomRef.current) {
-        socket.emit('join-room', activeRoomRef.current);
+      if (socket.connected) {
+        setSocketInstance(socket);
       }
-    });
 
-    if (socket.connected) {
-      setSocketInstance(socket);
-    }
+      socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+      });
 
-    socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
+      socket.on('disconnect', () => {
+        console.log('[SOCKET] Disconnected');
+        setSocketInstance(null);
+      });
 
-    socket.on('disconnect', () => {
-      console.log('[SOCKET] Disconnected');
-      setSocketInstance(null);
-    });
-
-    socket.on('message-delivered', ({ clientId }) => {
-      if (!clientId) return;
-      setMessages((prevMessages) => markMessageStatus(prevMessages, clientId, 'delivered'));
-    });
+      socket.on('message-delivered', ({ clientId }) => {
+        if (!clientId) return;
+        setMessages((prevMessages) => markMessageStatus(prevMessages, clientId, 'delivered'));
+      });
 
     }; // close initSocket
 
@@ -277,6 +285,15 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       }
     };
   }, [supabase]);
+
+  // ── Ensure socket always joins the active room ────────────────────────────
+  // This runs whenever the socket instance or active room changes.
+  // It handles: initial join, room switching, and socket reconnections.
+  useEffect(() => {
+    if (!socketInstance || !activeRoom) return;
+    console.log('[SOCKET] Ensuring join-room:', activeRoom);
+    socketInstance.emit('join-room', activeRoom);
+  }, [socketInstance, activeRoom]);
 
   useEffect(() => {
     setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -371,7 +388,9 @@ const { theme, toggleTheme } = useContext(ThemeContext);
     };
   }, [activeRoom, socketInstance, addStreamStart, appendStreamChunk, finalizeStream, scrollToBottom]);
 
-  useEffect(() => {
+useEffect(() => {
+    let scrollToBottomTimeout;
+    
     async function fetchMessages() {
       if (!activeRoom) return;
       
@@ -387,12 +406,17 @@ const { theme, toggleTheme } = useContext(ThemeContext);
         setMessageError('Failed to load messages');
       } finally {
         setLoadingMessages(false);
-        setTimeout(() => {
-          scrollToBottom(true);
-        }, 100);
       }
+      
+      scrollToBottomTimeout = setTimeout(() => {
+        scrollToBottom(true);
+      }, 100);
     }
     fetchMessages();
+
+    return () => {
+      if (scrollToBottomTimeout) clearTimeout(scrollToBottomTimeout);
+    };
   }, [activeRoom, scrollToBottom, supabase]);
 
   useEffect(() => {

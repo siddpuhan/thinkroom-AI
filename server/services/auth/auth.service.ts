@@ -69,6 +69,13 @@ export class AuthService {
    * Verify a raw token (used for Socket.IO connections).
    */
   public static async verifySocketToken(token: string) {
+    if (process.env.NODE_ENV === 'development' && token === 'mock-development-token') {
+      return {
+        id: '00000000-0000-0000-0000-000000000000',
+        email: 'mock-dev@example.com',
+        full_name: 'Mock Developer',
+      };
+    }
     const { data: { user }, error } = await supabase.auth.getUser(token);
     if (error || !user) {
       throw new Error('Invalid or expired token');

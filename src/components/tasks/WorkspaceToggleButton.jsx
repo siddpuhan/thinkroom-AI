@@ -6,12 +6,9 @@ import './WorkspaceToggleButton.css';
 
 export const WorkspaceToggleButton = () => {
   const togglePanel = useTaskStore(state => state.togglePanel);
-  const getTotalCount = useTaskStore(state => state.getTotalCount);
-  const getPendingCount = useTaskStore(state => state.getPendingCount);
+  const totalCount = useTaskStore(state => state.totalCount());
+  const pendingCount = useTaskStore(state => state.pendingCount());
   const latestTask = useTaskStore(state => state.latestTask);
-  
-  const totalCount = getTotalCount();
-  const pendingCount = getPendingCount();
 
   const [pulse, setPulse] = useState(false);
 

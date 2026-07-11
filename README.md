@@ -47,7 +47,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
 SUPABASE_URL=https://<your-project-id>.supabase.co
 SUPABASE_ANON_KEY=<your-anon-key>
 DATABASE_URL=your_postgresql_connection_string
-GEMINI_API_KEY=your_gemini_api_key
+GROQ_API_KEY=your_groq_api_key
 OPENAI_API_KEY=your_openai_api_key
 ```
 

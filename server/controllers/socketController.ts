@@ -2,14 +2,11 @@ import { Server, Socket } from "socket.io";
 import { getDB } from "../config/db.js";
 import { AuthService } from "../services/auth/auth.service.js";
 import { detectPersona } from "../ai/router.js";
-import { processPersonaStream } from "../ai/geminiService.js";
-import { PrefilterService } from "../services/ai/PrefilterService.js";
-import { GeminiExtraction } from "../services/ai/GeminiExtraction.js";
+import { processPersonaStream } from "../ai/groqService.js";
+import { AIWorker } from "../services/ai/AIWorker.js";
 import { TaskService } from "../services/tasks/TaskService.js";
-import { DecisionWorkflow } from "../services/decisions/DecisionWorkflow.js";
 import { DocumentService } from "../services/documents/DocumentService.js";
 import { ConversationBuffer } from "../services/ai/ConversationBuffer.js";
-import { NotesDispatcher } from "../services/notes/NotesDispatcher.js";
 import { NotesService } from "../services/notes/NotesService.js";
 import { SummaryBuilder } from "../services/summary/SummaryBuilder.js";
 import { MemoryService } from "../services/memory/MemoryService.js";
@@ -34,85 +31,7 @@ export const setupSocket = (io: Server) => {
 //   └── Task Detection Pipeline (independent, async)
 // ============================================================
 
-async function runTaskExtractionPipeline(messageText, roomId, senderName, sourceMessageId) {
-  const pipelineId = `[PIPELINE:${Date.now().toString(36)}]`;
-  
-  logStage("TASK_EXTRACTION_STARTED", { messageId: sourceMessageId, roomId, senderName });
-  
-  // STEP 1: Pre-filter gate (no Gemini call yet)
-  const shouldExtract = PrefilterService.shouldTriggerExtraction(messageText);
-  if (!shouldExtract) {
-    logStage("TASK_EXTRACTION_SKIPPED", { messageId: sourceMessageId, roomId, reason: "pre-filter" });
-    return;
-  }
-  io.to(roomId).emit("task_generation_status", { status: 'generating' });
-
-  // Load rolling conversation history
-  let history = [];
-  try {
-    const pool = getDB();
-    const historyResult = await pool.query(
-      `SELECT text, sender_name, created_at FROM messages WHERE room_id = $1 ORDER BY created_at DESC LIMIT 20`,
-      [roomId]
-    );
-    history = historyResult.rows.reverse();
-  } catch (err: any) {
-    logStage("TASK_EXTRACTION_HISTORY_FAILED", { roomId, error: err.message });
-  }
-
-  try {
-    // STEP 2: Gemini extraction
-    let extractedTasks = [];
-  try {
-    extractedTasks = await GeminiExtraction.extractTasks(messageText, roomId, senderName, history);
-  } catch (err: any) {
-      logStage("TASK_EXTRACTION_FAILED", { messageId: sourceMessageId, roomId, error: err.message });
-      return;
-    }
-
-    if (extractedTasks.length === 0) {
-      logStage("TASK_EXTRACTION_NO_TASKS", { messageId: sourceMessageId, roomId });
-      return;
-    }
-
-    // STEP 3: Persist each task and emit socket events
-    for (const taskData of extractedTasks) {
-      try {
-        const newTask = await TaskService.create({
-          roomId,
-          sourceMessageId: sourceMessageId || null,
-          title: taskData.title,
-          description: taskData.description || '',
-          assignedTo: taskData.assigned_to || null,
-          priority: taskData.priority || 'medium',
-          status: 'pending',
-          deadline: taskData.deadline || null,
-          confidence: taskData.confidence || 0.7,
-          aiGenerated: true,
-          createdBy: 'AI_SYSTEM'
-        });
-
-        logStage("TASK_SAVED", { id: newTask.id, roomId, title: newTask.title });
-
-        // STEP 4: Emit task_created to all room members
-        io.to(roomId).emit("task_created", {
-          ...newTask,
-          assignedToName: newTask.assigned_to_name || null,
-        });
-        logStage("TASK_EMITTED", { id: newTask.id, roomId });
-        MemoryService.triggerBackgroundRebuild(roomId);
-
-      } catch (dbErr: any) {
-        logStage("TASK_SAVE_FAILED", { roomId, error: dbErr.message });
-      }
-    }
-  } finally {
-    io.to(roomId).emit("task_generation_status", { status: 'idle' });
-  }
-
-  console.log(`${pipelineId} 🏁 PIPELINE COMPLETE`);
-  console.log(`${pipelineId} ─────────────────────────────────────`);
-}
+// Task extraction is now handled asynchronously by the background AIWorker burst queue.
 
 
 // ============================================================
@@ -154,7 +73,6 @@ io.on("connection", (socket) => {
 
     // 1. Immediately broadcast to room (chat rendering)
     io.to(roomId).emit("receive_message", message);
-    io.to(roomId).emit("message_created", message);
     logStage("MESSAGE_BROADCAST", { id: message?.id, roomId });
 
     const messageText = (message.text || message.content || '').trim();
@@ -171,25 +89,14 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // 3. Task extraction pipeline (async, non-blocking, completely isolated)
-    // Runs ONLY on non-persona messages
-    logStage("TASK_PIPELINE_QUEUED", { roomId });
-    setImmediate(() => {
-      runTaskExtractionPipeline(messageText, roomId, senderName, message.id || null)
-        .catch(err => logStage("TASK_PIPELINE_ERROR", { roomId, error: String(err) }));
-    });
-
-    // 4. Decision workflow — stage/update candidate, then finalize only after stability
+    // 3. Unified Background AI Worker (debounced, non-blocking, asynchronous)
     ConversationBuffer.push(roomId, message);
-    DecisionWorkflow.observeMessage({ roomId, message, io })
-      .catch(err => logStage("DECISION_PIPELINE_ERROR", { roomId, error: String(err) }));
-
-    // 5. Notes dispatcher — independent from task and decision engines
-    logStage("NOTES_PIPELINE_QUEUED", { roomId });
-    setImmediate(() => {
-      NotesDispatcher.process({ messageText, roomId, senderName, io })
-        .catch(err => logStage("NOTES_PIPELINE_ERROR", { roomId, error: String(err) }));
-    });
+    AIWorker.enqueueMessage(roomId, {
+      id: message.id || Date.now().toString(),
+      text: messageText,
+      sender_name: senderName,
+      user_id: (socket as any).user?.id
+    }, io);
   });
 
   // ─── Task Socket Events ────────────────────────────────────

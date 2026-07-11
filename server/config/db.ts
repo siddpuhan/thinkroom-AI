@@ -216,8 +216,20 @@ const connectDB = async () => {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_type ON public.notes(type);`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_created_at ON public.notes(created_at DESC);`);
 
+    // summaries
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS public.summaries (
+        room_id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        confidence FLOAT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
+
     // idempotent RLS enable
     await client.query(`ALTER TABLE IF EXISTS public.users ENABLE ROW LEVEL SECURITY;`);
+    await client.query(`ALTER TABLE IF EXISTS public.summaries ENABLE ROW LEVEL SECURITY;`);
     await client.query(`ALTER TABLE IF EXISTS public.messages ENABLE ROW LEVEL SECURITY;`);
     await client.query(`ALTER TABLE IF EXISTS public.resources ENABLE ROW LEVEL SECURITY;`);
     await client.query(`ALTER TABLE IF EXISTS public.tasks ENABLE ROW LEVEL SECURITY;`);

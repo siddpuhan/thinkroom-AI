@@ -428,7 +428,7 @@ const AIDocumentSection = memo(({ type, socket, roomId }) => {
   const docIdsStr = useTaskStore(
     useCallback(
       (state) => Object.values(state.documents)
-        .filter(d => !d.is_deleted && !d.is_archived)
+        .filter(d => !d.deleted_at && !d.archived)
         .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))
         .map(d => d.id)
         .join(','),
@@ -513,21 +513,21 @@ const AITrashSection = memo(({ socket, roomId, setConfirmDelete }) => {
 
   const trashDocIdsStr = useTaskStore(
     useCallback(
-      (state) => Object.values(state.documents).filter(d => d.is_deleted).map(d => d.id).join(','),
+      (state) => Object.values(state.documents).filter(d => !!d.deleted_at).map(d => d.id).join(','),
       []
     )
   );
 
   const trashDecisionIdsStr = useTaskStore(
     useCallback(
-      (state) => Object.values(state.decisions).filter(d => d.is_deleted).map(d => d.decision_id).join(','),
+      (state) => Object.values(state.decisions || {}).filter(d => d.is_deleted).map(d => d.decision_id).join(','),
       []
     )
   );
 
   const trashSummaryIdsStr = useTaskStore(
     useCallback(
-      (state) => Object.values(state.summaries).filter(s => !!s.deleted_at).map(s => s.id).join(','),
+      (state) => Object.values(state.summaries || {}).filter(s => !!s.deleted_at).map(s => s.id).join(','),
       []
     )
   );
@@ -665,21 +665,21 @@ const AIArchiveSection = memo(({ socket, roomId }) => {
 
   const archivedDocIdsStr = useTaskStore(
     useCallback(
-      (state) => Object.values(state.documents).filter(d => d.is_archived && !d.is_deleted).map(d => d.id).join(','),
+      (state) => Object.values(state.documents).filter(d => d.archived && !d.deleted_at).map(d => d.id).join(','),
       []
     )
   );
 
   const archivedDecisionIdsStr = useTaskStore(
     useCallback(
-      (state) => Object.values(state.decisions).filter(d => d.is_archived && !d.is_deleted).map(d => d.decision_id).join(','),
+      (state) => Object.values(state.decisions || {}).filter(d => d.is_archived && !d.is_deleted).map(d => d.decision_id).join(','),
       []
     )
   );
 
   const archivedSummaryIdsStr = useTaskStore(
     useCallback(
-      (state) => Object.values(state.summaries).filter(s => s.is_archived && !s.deleted_at).map(s => s.id).join(','),
+      (state) => Object.values(state.summaries || {}).filter(s => s.is_archived && !s.deleted_at).map(s => s.id).join(','),
       []
     )
   );
@@ -990,7 +990,7 @@ const AITaskPanel = memo(({ socket, roomId, setConfirmDelete }) => {
   const totalTasks = Object.values(tasks).filter(t => !t.is_deleted && !t.is_archived).length;
   const pendingCount = Object.values(tasks).filter(t => t.status === 'pending' && !t.is_deleted && !t.is_archived).length;
   const completedCount = Object.values(tasks).filter(t => t.status === 'completed' && !t.is_deleted && !t.is_archived).length;
-  const totalDocs = Object.values(documents).filter(d => !d.is_deleted && !d.is_archived).length;
+  const totalDocs = Object.values(documents).filter(d => !d.deleted_at && !d.archived).length;
   const totalNotes = Object.values(notes).filter(n => !n.deleted_at && !n.archived_at).length;
 
   const resetInactivityTimer = useCallback(() => {
@@ -1167,12 +1167,17 @@ const AINotificationChip = memo(({ latestTask, latestDocument, latestNote, lates
     return `🧠 AI detected possible decision${decision?.title ? ` — ${decision.title}` : ''}`;
   };
 
+  const onDismissRef = useRef(onDismiss);
+  useEffect(() => { onDismissRef.current = onDismiss; });
+
   useEffect(() => {
+    // Use a ref-backed callback so the timer is only set once on mount
+    // (avoids resetting when Zustand re-creates the function reference)
     const timer = setTimeout(() => {
-      onDismiss();
+      onDismissRef.current();
     }, 5000);
     return () => clearTimeout(timer);
-  }, [onDismiss]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <motion.div
@@ -1241,6 +1246,7 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
   const removeDocument = useTaskStore(state => state.removeDocument);
   const upsertNote = useTaskStore(state => state.upsertNote);
   const removeNote = useTaskStore(state => state.removeNote);
+  const upsertSummary = useTaskStore(state => state.upsertSummary);
   const setGeneratingTask = useTaskStore(state => state.setGeneratingTask);
 
   // Handle permanent hard deletion of items confirmed by user
@@ -1328,6 +1334,25 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
       removeNote(noteId);
     };
 
+    const handleSummaryUpdated = (payload) => {
+      console.log("[SOCKET EVENT] summary_updated:", payload);
+      // The rolling summary from AIWorker has room_id + summary text, not an object in the summaries map.
+      // We expose it as a pseudo-record so AISummarySection can render it if needed.
+      if (payload && payload.roomId) {
+        upsertSummary({
+          id: `rolling-${payload.roomId}`,
+          room_id: payload.roomId,
+          content: payload.summary,
+          summary_type: 'rolling',
+          title: 'Rolling Conversation Summary',
+          created_at: payload.timestamp || new Date().toISOString(),
+          updated_at: payload.timestamp || new Date().toISOString(),
+          is_archived: false,
+          deleted_at: null
+        });
+      }
+    };
+
     socket.on('task_created', handleTaskCreated);
     socket.on('task_updated', handleTaskUpdated);
     socket.on('task_deleted', handleTaskDeleted);
@@ -1339,6 +1364,7 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
     socket.on('note_created', handleNoteCreated);
     socket.on('note_updated', handleNoteUpdated);
     socket.on('note_deleted', handleNoteDeleted);
+    socket.on('summary_updated', handleSummaryUpdated);
 
     // AI processing indicators (server emits these around Gemini calls)
     const handleTaskGenerationStatus = ({ status }) => {
@@ -1362,11 +1388,12 @@ export const AITaskWorkspace = memo(({ socket, roomId }) => {
       socket.off('note_created', handleNoteCreated);
       socket.off('note_updated', handleNoteUpdated);
       socket.off('note_deleted', handleNoteDeleted);
+      socket.off('summary_updated', handleSummaryUpdated);
 
       socket.off('task_generation_status', handleTaskGenerationStatus);
       socket.off('decision_analysis_status', handleDecisionAnalysisStatus);
     };
-  }, [socket, roomId, setTasks, setDocuments, setNotes, upsertTask, removeTask, upsertDocument, removeDocument, upsertNote, removeNote, setGeneratingTask]);
+  }, [socket, roomId, setTasks, setDocuments, setNotes, upsertTask, removeTask, upsertDocument, removeDocument, upsertNote, removeNote, upsertSummary, setGeneratingTask]);
 
   // ── Reset state on room change ───────────────────────────
   useEffect(() => {

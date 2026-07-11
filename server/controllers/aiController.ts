@@ -1,12 +1,12 @@
-import { googleAI } from "../utils/geminiClient.js";
+import { groq } from "../utils/groqClient.js";
 import { getDB } from "../config/db.js";
 
 export const processThinkRoomAI = async (roomId, userQuestion, io) => {
   const pool = getDB();
   
   try {
-    if (!googleAI) {
-      console.error("Gemini API is not configured.");
+    if (!groq) {
+      console.error("Groq API client is not configured.");
       return;
     }
 
@@ -24,23 +24,18 @@ export const processThinkRoomAI = async (roomId, userQuestion, io) => {
     // 2. Think: Format them for the AI to read like a script
     const chatHistory = history.reverse().map(m => `${m.sender_name || 'User'}: ${m.text}`).join('\n');
 
-    const model = googleAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const chat = model.startChat({
-      history: [
-        {
-          role: "user",
-          parts: [{ text: `System context: You are ThinkRoom AI, a helpful teammate in this chat. Use the following history to answer questions concisely.\nHistory:\n${chatHistory}` }]
-        },
-        {
-          role: "model",
-          parts: [{ text: "Understood. I will use the history context to assist the team as ThinkRoom AI." }]
-        }
-      ]
+    const userText = userQuestion.replace('@ai', '').trim();
+
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: `You are ThinkRoom AI, a helpful teammate in this chat. Use the following history to answer questions concisely.\nHistory:\n${chatHistory}` },
+        { role: "user", content: userText }
+      ],
+      temperature: 0.7
     });
 
-    const userText = userQuestion.replace('@ai', '').trim();
-    const result = await chat.sendMessage(userText);
-    const aiReply = result.response.text();
+    const aiReply = completion.choices[0]?.message?.content || "";
 
     // 3. Speak: Save the AI's answer back to PostgreSQL
     const insertResult = await pool.query(`
@@ -64,4 +59,3 @@ export const processThinkRoomAI = async (roomId, userQuestion, io) => {
     console.error("ThinkRoom AI Error:", error);
   }
 };
-

@@ -14,6 +14,8 @@ export const useTaskStore = create<any>((set: any, get: any) => ({
   tasks: {} as Record<string, Task>,
   documents: {} as Record<string, Document>,
   notes: {} as Record<string, Note>,
+  summaries: {} as Record<string, any>, // rolling AI conversation summaries
+  decisions: {} as Record<string, any>, // extracted decisions
 
   // ─── UI State ─────────────────────────────────────────────
   // Whether the AI task workspace panel is expanded
@@ -57,9 +59,8 @@ export const useTaskStore = create<any>((set: any, get: any) => ({
       ...(isNew ? {
         latestTask: task,
         notificationType: 'task',
-        showNotification: true,
+        showNotification: !prev.isPanelOpen, // only show if panel is closed
         newTaskCount: prev.newTaskCount + 1,
-        isPanelOpen: false, // Let the chip appear first
       } : {})
     }));
   },
@@ -94,8 +95,7 @@ export const useTaskStore = create<any>((set: any, get: any) => ({
       ...(!options.silent && isNew ? {
         latestDocument: doc,
         notificationType: 'document',
-        showNotification: true,
-        isPanelOpen: false, // Let the chip appear first
+        showNotification: !prev.isPanelOpen, // only show if panel is closed
       } : {})
     }));
   },
@@ -128,8 +128,7 @@ export const useTaskStore = create<any>((set: any, get: any) => ({
       ...(isNew ? {
         latestNote: note,
         notificationType: 'note',
-        showNotification: true,
-        isPanelOpen: false,
+        showNotification: !prev.isPanelOpen, // only show if panel is closed
       } : {})
     }));
   },
@@ -140,6 +139,51 @@ export const useTaskStore = create<any>((set: any, get: any) => ({
       const newNotes = { ...state.notes };
       delete newNotes[noteId];
       return { notes: newNotes };
+    });
+  },
+
+  // ─── Summary Actions (rolling AI summaries per-room) ─────
+
+  setSummaries: (summaryArray: any) => {
+    set({
+      summaries: summaryArray.reduce((acc: any, s: any) => ({ ...acc, [s.id]: s }), {})
+    });
+  },
+
+  upsertSummary: (summary: any) => {
+    set((prev: any) => ({
+      summaries: { ...prev.summaries, [summary.id]: summary }
+    }));
+  },
+
+  removeSummary: (summaryId: string) => {
+    set((state: any) => {
+      const next = { ...state.summaries };
+      delete next[summaryId];
+      return { summaries: next };
+    });
+  },
+
+  // ─── Decision Actions ─────────────────────────────────────
+
+  setDecisions: (decisionArray: any) => {
+    set({
+      decisions: decisionArray.reduce((acc: any, d: any) => ({ ...acc, [d.decision_id || d.id]: d }), {})
+    });
+  },
+
+  upsertDecision: (decision: any) => {
+    const key = decision.decision_id || decision.id;
+    set((prev: any) => ({
+      decisions: { ...prev.decisions, [key]: decision }
+    }));
+  },
+
+  removeDecision: (decisionId: string) => {
+    set((state: any) => {
+      const next = { ...state.decisions };
+      delete next[decisionId];
+      return { decisions: next };
     });
   },
 
@@ -198,6 +242,10 @@ export const useTaskStore = create<any>((set: any, get: any) => ({
   getTotalCount: () => Object.values(get().tasks).filter(t => !t.is_deleted && !t.is_archived).length,
   getPendingCount: () => Object.values(get().tasks).filter(t => t.status === 'pending' && !t.is_deleted && !t.is_archived).length,
 
+  // Reactive derived values (updated via selectors computed from state)
+  totalCount: () => Object.values(get().tasks).filter(t => !t.is_deleted && !t.is_archived).length,
+  pendingCount: () => Object.values(get().tasks).filter(t => t.status === 'pending' && !t.is_deleted && !t.is_archived).length,
+
   getDocumentsByCategory: (category: any) => {
     const docs = Object.values(get().documents);
     const activeDocs = docs.filter(d => !(d as any).deleted_at && !(d as any).archived);
@@ -219,11 +267,11 @@ export const useTaskStore = create<any>((set: any, get: any) => ({
 
   getActiveNotes: () => {
     return Object.values(get().notes)
-      .filter(n => !n.deleted_at || (n as any).deleted_at && !n.archived_at)
-      .sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime() - new Date(a.created_at));
+      .filter(n => !n.deleted_at && !n.archived_at)
+      .sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
   },
 
-  getTotalNoteCount: () => Object.values(get().notes).filter(n => !n.deleted_at || (n as any).deleted_at && !n.archived_at).length,
+  getTotalNoteCount: () => Object.values(get().notes).filter(n => !n.deleted_at && !n.archived_at).length,
 
   // ─── Trash Selectors ──────────────────────────────────────
 

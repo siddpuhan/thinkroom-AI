@@ -29,11 +29,6 @@ export function SupabaseProvider({
   const [user, setUser] = useState(initialSession?.user ?? null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-    });
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {

@@ -53,7 +53,7 @@ function requireKey(raw: string | undefined, key: string): string {
 export const SUPABASE_URL = validateSupabaseUrl(process.env.SUPABASE_URL, 'SUPABASE_URL');
 export const SUPABASE_ANON_KEY = requireKey(process.env.SUPABASE_ANON_KEY, 'SUPABASE_ANON_KEY');
 export const DATABASE_URL = requireKey(process.env.DATABASE_URL, 'DATABASE_URL');
-export const GEMINI_API_KEY = requireKey(process.env.GEMINI_API_KEY, 'GEMINI_API_KEY');
+export const GROQ_API_KEY = requireKey(process.env.GROQ_API_KEY, 'GROQ_API_KEY');
 export const PORT = process.env.PORT || '5000';
 
 export const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || undefined;

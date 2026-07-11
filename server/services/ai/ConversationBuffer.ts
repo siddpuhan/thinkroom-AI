@@ -93,7 +93,7 @@ class ConversationBufferClass {
       room.analysisTimer = null;
     }
 
-    // Still respect dedup cooldown so we don't spam Gemini on every keystroke during an agreement
+    // Still respect dedup cooldown so we don't spam Groq on every keystroke during an agreement
     const timeSinceLastAnalysis = Date.now() - room.lastAnalyzedAt;
     if (timeSinceLastAnalysis < DEDUP_COOLDOWN_MS) {
       console.log(`[CONV BUFFER] ⏳ Room ${roomId}: Skipping immediate trigger — cooldown active`);

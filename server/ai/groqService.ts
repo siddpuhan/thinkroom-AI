@@ -1,4 +1,4 @@
-import { googleAI, withRetry } from "../utils/geminiClient.js";
+import { groq } from "../utils/groqClient.js";
 import { getDB } from "../config/db.js";
 import { logger } from "../utils/logger.js";
 import { MemoryService } from "../services/memory/MemoryService.js";
@@ -7,8 +7,8 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
   const pool = getDB();
   
   try {
-    if (!googleAI) {
-      throw new Error("Gemini API client is not configured.");
+    if (!groq) {
+      throw new Error("Groq API client is not configured.");
     }
 
     // 1. Fetch Room History (last 15 messages)
@@ -30,29 +30,28 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
       color: persona.color
     });
 
-    const model = googleAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-    // 4. Initialize Stream with retry mechanism
-    const resultStream = await withRetry(() => model.generateContentStream({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: `${persona.role}\n\n${memoryContext}\n\nRecent Conversation History:\n${chatHistory}\n\nUser input: ${cleanPrompt}` }]
-        }
-      ]
-    }));
+    // 4. Initialize Stream with Llama-3.3 on Groq
+    const chatCompletionStream = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: `${persona.role}\n\n${memoryContext}` },
+        { role: "user", content: `Recent Conversation History:\n${chatHistory}\n\nUser input: ${cleanPrompt}` }
+      ],
+      stream: true
+    });
 
     let fullResponse = "";
 
     // 5. Stream chunks over Socket.IO
-    for await (const chunk of resultStream.stream) {
-      const content = chunk.text() || "";
-      fullResponse += content;
-      
-      io.to(roomId).emit("ai_stream_chunk", {
-        messageId,
-        chunk: content
-      });
+    for await (const chunk of chatCompletionStream) {
+      const content = chunk.choices[0]?.delta?.content || "";
+      if (content) {
+        fullResponse += content;
+        io.to(roomId).emit("ai_stream_chunk", {
+          messageId,
+          chunk: content
+        });
+      }
     }
 
     // 6. Finalize: Save to DB & emit completion
@@ -68,7 +67,7 @@ export async function processPersonaStream(roomId, messageId, cleanPrompt, perso
       created_at: insertResult.rows[0].created_at
     });
   } catch (error: any) {
-    logger.error("GEMINI-SERVICE", `AI Stream Error: ${error.message}`, error);
+    logger.error("GROQ-SERVICE", `AI Stream Error: ${error.message}`, error);
     io.to(roomId).emit("ai_stream_end", {
       messageId,
       finalDbId: `error-${messageId}`,

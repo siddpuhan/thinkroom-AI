@@ -17,12 +17,13 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
+  const initialSession = user ? { user } : null;
 
   return (
     <html lang="en">
       <body>
-        <SupabaseProvider initialSession={session}>
+        <SupabaseProvider initialSession={initialSession}>
           <ThemeProvider>
             {children}
           </ThemeProvider>

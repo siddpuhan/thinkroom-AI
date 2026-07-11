@@ -8,7 +8,7 @@ const TEST_ROOM = '1234'; // Same room as in screenshot
 console.log("=== Socket Pipeline Test ===\n");
 console.log(`Connecting to ${SOCKET_URL}...`);
 
-const socket = io(SOCKET_URL, { transports: ['websocket'] });
+const socket = io(SOCKET_URL, { transports: ['websocket'], auth: { token: 'mock-development-token' } });
 
 socket.on('connect', () => {
   console.log(`✅ Connected: ${socket.id}`);
