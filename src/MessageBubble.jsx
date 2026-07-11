@@ -1,4 +1,5 @@
 import React, { useState, lazy, Suspense } from 'react';
+import { motion } from 'framer-motion';
 import { Copy, RefreshCw, Check, Zap } from 'lucide-react';
 
 const MarkdownRenderer = lazy(() => import('./components/MarkdownRenderer'));
@@ -23,18 +24,18 @@ const PERSONA_COLORS = {
   "ThinkRoom AI": "text-purple-400"
 };
 
-const MessageBubble = ({ message, isOwnMessage }) => {
+const MessageBubble = ({ message, isOwnMessage, groupedWithPrev }) => {
   const [copied, setCopied] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
   const isAI = AI_PERSONAS.includes(message.sender_name) || message.personaId || message.isStreaming;
   const personaColor = message.color || PERSONA_COLORS[message.sender_name];
   
-  const bubbleClass = isAI 
-    ? `ai-message message-bubble` 
-    : isOwnMessage 
-      ? 'right-message message-bubble' 
-      : 'left-message message-bubble';
+  const bubbleClass = [
+    isAI ? 'ai-message' : isOwnMessage ? 'right-message' : 'left-message',
+    'message-bubble',
+    groupedWithPrev ? 'grouped-with-prev' : ''
+  ].filter(Boolean).join(' ');
 
   const displayName = isAI 
     ? (message.sender_name || 'ThinkRoom AI') 
@@ -59,15 +60,19 @@ const MessageBubble = ({ message, isOwnMessage }) => {
   };
 
   return (
-    <div 
-      className={bubbleClass} 
-      onMouseEnter={() => setIsHovered(true)} 
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 12, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+      className={bubbleClass}
+      onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div className={`avatar ${isAI ? 'ai-avatar' : ''}`}>{avatarInitial}</div>
+      {!isOwnMessage && <div className={`avatar ${isAI ? 'ai-avatar' : ''}`}>{avatarInitial}</div>}
       <div className="message-content">
         {!isOwnMessage && (
-          <div className={`message-sender-name ${personaColor || ''}`} style={{ fontSize: '0.8rem', fontWeight: '700', marginBottom: '8px', color: isAI && !personaColor ? '#a855f7' : (personaColor ? undefined : '#888'), display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div className={`message-sender-name ${personaColor || ''}`}>
             {displayName}
             {isAI && <span className="ai-badge"><Zap size={10} style={{display: 'inline', marginRight: '2px', marginBottom: '1px'}}/>AI</span>}
           </div>
@@ -102,7 +107,7 @@ const MessageBubble = ({ message, isOwnMessage }) => {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

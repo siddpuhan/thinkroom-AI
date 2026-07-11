@@ -609,147 +609,188 @@ useEffect(() => {
     });
   };
 
+  const isOffline = mode === 'offline';
+
   return (
-    <div className="chat-page-container">
-      <AnimatedBackground />
-       <header className="chat-header">
-         <h1>ThinkRoom AI {activeRoom ? `- Room: ${activeRoom}` : '- Global Chat'}</h1>
-         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-           <NetworkStatus queuedCount={queuedCount} />
+    <div className="app-workspace">
+      <div className="chat-page-container">
+
+        {/* ── Premium Header ── */}
+        <header className="chat-header">
+          <div className="header-left">
+            <span className="header-logo">ThinkRoom</span>
+            {activeRoom && (
+              <div className="header-room-group">
+                <div className="header-room-badge">
+                  <span className="room-hash">#</span>
+                  <span className="room-name">{activeRoom}</span>
+                  <button
+                    type="button"
+                    className="room-leave-btn"
+                    onClick={handleLeaveRoom}
+                    title="Leave room"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className={`room-status-indicator ${isOffline ? 'offline' : ''}`}>
+                  <span className="status-dot" />
+                  <span>{isOffline ? 'Offline' : 'Live'}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="header-center">
+            {activeRoom && (
+              <>
+                <span className="header-room-name-display">#{activeRoom}</span>
+                <span className="header-participants">● {isOffline ? '0 connected' : 'Connected'}</span>
+              </>
+            )}
+            {activeRoom && <NetworkStatus queuedCount={queuedCount} />}
+          </div>
+          <div className="header-right">
+            {activeRoom && <WorkspaceToggleButton />}
+            <button
+              onClick={toggleTheme}
+              className="header-icon-btn"
+              title="Toggle theme"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <form action={logout}>
-              <button type="submit" className="chat-button-subtle" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }} title="Sign Out">
-                Sign Out
+              <button type="submit" className="header-icon-btn sign-out" title="Sign Out">
+                ⇤
               </button>
             </form>
-           <button 
-             onClick={toggleTheme}
-             className="chat-button-subtle"
-             title="Toggle dark/light mode"
-           >
-             {theme === 'dark' ? '☀️' : '🌙'}
-           </button>
-         </div>
-       </header>
+          </div>
+        </header>
 
-      <div className="chat-controls-bar">
-        <div className="chat-controls">
-          <input
-            type="text"
-            className="chat-input-room"
-            value={roomInput}
-            onChange={(e) => setRoomInput(e.target.value)}
-            placeholder="Enter Room ID"
-          />
-          <button type="button" className="chat-button" onClick={handleJoinRoom}>
-            Join Room
-          </button>
-          {activeRoom && (
-            <button type="button" className="recap-button" onClick={handleRecap}>
-              ✨ Catch Me Up
-            </button>
-          )}
-          <button type="button" className="chat-button-secondary" onClick={handleLeaveRoom}>
-            Leave Room
-          </button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <StatusBadge mode={mode} />
-          {activeRoom && <WorkspaceToggleButton />}
-        </div>
-      </div>
-
-        <div className="chat-main-area">
-          <div className="chat-container">
-            <div className="chat-layout">
-              <div className="chat-content">
-                <div className="message-list" ref={messageListRef} onScroll={handleScroll}>
-                {loadingMessages ? (
-                  <div className="empty-state">Loading messages...</div>
-                ) : messageError ? (
-                  <div className="empty-state">{messageError}</div>
-                ) : messages.length > 0 ? (
-                  messages.map((msg) => {
-                    const isMine = msg.sender_id === currentUserId;
-                    return (
-                      <MessageBubble
-                        key={msg.id ?? `${msg.created_at || msg.timestamp}-${msg.text}`}
-                        message={msg}
-                        isOwnMessage={isMine}
-                      />
-                    );
-                  })
-                ) : (
-                  <div className="empty-state">
-                    <h2>Welcome!</h2>
-                    <p>No messages yet. Start the conversation or join a room.</p>
-                  </div>
-                )}
-                {Object.values(streamingMessages).map(streamMsg => (
-                  <MessageBubble
-                    key={`stream-${streamMsg.id}`}
-                    message={streamMsg}
-                    isOwnMessage={false}
+        {/* ── Body ── */}
+        <div className="chat-body">
+          {!activeRoom ? (
+            <div className="join-prompt">
+              <div className="join-prompt-card">
+                <div className="join-prompt-icon">✦</div>
+                <h2 className="join-prompt-title">Join a Room</h2>
+                <p className="join-prompt-subtitle">Enter a room ID to start collaborating with your team</p>
+                <div className="join-prompt-input-group">
+                  <input
+                    type="text"
+                    className="join-prompt-input"
+                    value={roomInput}
+                    onChange={(e) => setRoomInput(e.target.value)}
+                    placeholder="e.g. project-alpha"
+                    onKeyDown={(e) => e.key === 'Enter' && handleJoinRoom()}
                   />
-                ))}
-                {isThinking && (
-                  <div className="ai-thinking">
-                    <span>ThinkRoom AI is processing</span>
-                    <div className="thinking-dots">
-                      <span></span>
-                      <span></span>
-                      <span></span>
+                  <button type="button" className="join-prompt-btn" onClick={handleJoinRoom}>
+                    Join Room
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="chat-main">
+              <AnimatedBackground />
+              <div className="conversation-column">
+                <div className="message-list" ref={messageListRef} onScroll={handleScroll}>
+                  {loadingMessages ? (
+                    <div className="empty-state">Loading messages...</div>
+                  ) : messageError ? (
+                    <div className="empty-state">{messageError}</div>
+                  ) : messages.length > 0 ? (
+                    messages.map((msg, idx) => {
+                      const isMine = msg.sender_id === currentUserId;
+                      const prevMsg = idx > 0 ? messages[idx - 1] : null;
+                      const groupedWithPrev = prevMsg &&
+                        prevMsg.sender_id === msg.sender_id &&
+                        !msg.isStreaming && !prevMsg.isStreaming &&
+                        new Date(msg.created_at || msg.timestamp) - new Date(prevMsg.created_at || prevMsg.timestamp) < 120000;
+                      return (
+                        <MessageBubble
+                          key={msg.id ?? `${msg.created_at || msg.timestamp}-${msg.text}`}
+                          message={msg}
+                          isOwnMessage={isMine}
+                          groupedWithPrev={groupedWithPrev}
+                        />
+                      );
+                    })
+                  ) : (
+                    <div className="empty-state">
+                      <div className="empty-state-icon">✦</div>
+                      <h2 className="empty-title">Welcome to #{activeRoom}</h2>
+                      <p className="empty-subtitle">No messages yet. Start the conversation.</p>
                     </div>
-                  </div>
+                  )}
+                  {Object.values(streamingMessages).map(streamMsg => (
+                    <MessageBubble
+                      key={`stream-${streamMsg.id}`}
+                      message={streamMsg}
+                      isOwnMessage={false}
+                    />
+                  ))}
+                  {isThinking && (
+                    <div className="ai-thinking">
+                      <span>ThinkRoom AI is processing</span>
+                      <div className="thinking-dots">
+                        <span></span><span></span><span></span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {showNewMessageIndicator && (
+                  <button
+                    type="button"
+                    className="new-messages-indicator"
+                    onClick={() => scrollToBottom(true)}
+                  >
+                    New Messages ↓
+                  </button>
                 )}
               </div>
-              {showNewMessageIndicator && (
-                <button
-                  type="button"
-                  className="new-messages-indicator"
-                  onClick={() => scrollToBottom(true)}
-                >
-                  New Messages ↓
-                </button>
-              )}
-              <ChatInput
-                onSendMessage={handleSendMessage}
-                socket={socketInstance}
-                roomId={activeRoom}
-                userName={currentUserNameRef.current}
-                placeholder="Message ThinkRoom AI..."
-              />
             </div>
-          </div>
+          )}
         </div>
+
+        {/* ── Floating Composer ── */}
+        {activeRoom && (
+          <div className="composer-area">
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              socket={socketInstance}
+              roomId={activeRoom}
+              userName={currentUserNameRef.current}
+              placeholder="Message ThinkRoom AI..."
+            />
+          </div>
+        )}
+
+        {/* ── Recap FAB ── */}
+        {activeRoom && (
+          <button type="button" className="recap-fab" onClick={handleRecap} title="Catch Me Up">
+            ✨
+          </button>
+        )}
+
+        <Suspense fallback={<div className="ai-workspace-loading">Loading AI Workspace...</div>}>
+          <AITaskWorkspace socket={socketInstance} roomId={activeRoom} />
+        </Suspense>
+
+        {showMemoryDebug && memoryDebugInfo && (
+          <div className="memory-debug-panel">
+            <div className="memory-debug-header">
+              <h3 className="memory-debug-title">🧠 Room Memory</h3>
+              <button className="memory-debug-close" onClick={() => setShowMemoryDebug(false)}>✕</button>
+            </div>
+            <div className="memory-debug-meta">
+              <strong>Tokens:</strong> {memoryDebugInfo.tokenCount} &middot;
+              <strong>Updated:</strong> {new Date(memoryDebugInfo.updatedAt).toLocaleTimeString()}
+            </div>
+            <pre className="memory-debug-content">{memoryDebugInfo.contextString}</pre>
+          </div>
+        )}
       </div>
-
-      <Suspense fallback={<div className="ai-workspace-loading">Loading AI Workspace...</div>}>
-        <AITaskWorkspace socket={socketInstance} roomId={activeRoom} />
-      </Suspense>
-
-      {showMemoryDebug && memoryDebugInfo && (
-        <div style={{
-          position: 'fixed', bottom: 20, left: 20, width: '400px', maxHeight: '60vh',
-          backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px',
-          padding: '16px', color: '#f8fafc', zIndex: 9999, overflowY: 'auto',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem', color: '#38bdf8' }}>🧠 Room Memory Debug</h3>
-            <button onClick={() => setShowMemoryDebug(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>✖</button>
-          </div>
-          <div style={{ marginBottom: '12px', fontSize: '0.85rem', color: '#94a3b8' }}>
-            <strong>Tokens (Chars):</strong> {memoryDebugInfo.tokenCount} <br/>
-            <strong>Last Updated:</strong> {new Date(memoryDebugInfo.updatedAt).toLocaleTimeString()}
-          </div>
-          <pre style={{ 
-            fontSize: '0.75rem', whiteSpace: 'pre-wrap', background: '#0f172a', 
-            padding: '12px', borderRadius: '4px', overflowX: 'hidden'
-          }}>
-            {memoryDebugInfo.contextString}
-          </pre>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,66 +1,67 @@
-/* WorkspaceToggleButton.css */
-
 .workspace-toggle-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  padding: 6px 14px;
-  border-radius: 100px;
-  color: #e2e8f0;
-  font-size: 0.85rem;
+  gap: 6px;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  padding: 5px 12px;
+  border-radius: var(--ds-radius-full);
+  color: var(--ds-accent-light);
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(8px);
-  margin-left: 12px;
+  transition: all 0.15s;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
 }
 
 .workspace-toggle-btn:hover {
-  background: rgba(139, 92, 246, 0.25);
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
+  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(139, 92, 246, 0.25);
+  transform: translateY(-1px);
 }
 
 .wtb-icon {
-  font-size: 1rem;
+  font-size: 0.85rem;
 }
 
 .wtb-label {
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .wtb-count {
-  color: #a78bfa;
+  background: var(--ds-accent);
+  color: white;
+  padding: 0 7px;
+  border-radius: var(--ds-radius-full);
   font-weight: 700;
+  font-size: 0.58rem;
+  line-height: 1.6;
+  min-width: 18px;
+  text-align: center;
 }
 
 .wtb-indicator {
-  font-size: 0.5rem;
-  margin-left: 2px;
-  animation: pulse-red 2s infinite;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ds-warning);
+  animation: wtbPulse 1.5s infinite;
+  flex-shrink: 0;
 }
 
-@keyframes pulse-red {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.7; }
-  100% { transform: scale(1); opacity: 1; }
+@keyframes wtbPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.3); }
 }
 
 .workspace-toggle-btn.pulse-anim {
   animation: btnPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  border-color: rgba(167, 139, 250, 0.8);
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+  border-color: var(--ds-accent);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.15);
 }
 
 @keyframes btnPulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: .9;
-    transform: scale(1.03);
-  }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .88; transform: scale(1.03); }
 }

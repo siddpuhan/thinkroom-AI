@@ -1,3 +1,2 @@
-@import "tailwindcss";
-
-/* Preserve existing global styles if any from App.css will be imported in layout */
+/* Tailwind is initialized in landing-theme.css for the landing page.
+   App.css provides global styles for the workspace. */

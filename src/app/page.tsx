@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSupabase } from "../components/SupabaseProvider";
-import LandingPage from "../LandingPage";
+import ProductionLandingPage from "../components/landing/ProductionLandingPage";
 
 export default function Home() {
   const router = useRouter();
@@ -75,7 +75,7 @@ export default function Home() {
   }
 
   return (
-    <LandingPage
+    <ProductionLandingPage
       onEnterChat={googleAuth}
       onEnterResources={() => setEmailMode("signup")}
     />

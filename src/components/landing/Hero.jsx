@@ -17,7 +17,7 @@ const Hero = ({ onEnterChat, onEnterResources }) => {
           When disasters take down networks, ThinkRoom AI keeps people connected using offline-first technology.
         </p>
         <div className="lp-hero-actions">
-          <button className="lp-hero-btn lp-hero-btn-primary" onClick={onEnterChat}>
+          <button className="lp-hero-btn lp-hero-tr-btn-primary" onClick={onEnterChat}>
             Request Help
           </button>
           <button className="lp-hero-btn lp-hero-btn-dark" onClick={onEnterResources}>

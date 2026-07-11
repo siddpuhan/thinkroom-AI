@@ -1,11 +1,7 @@
 .animated-background {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: -100;
-  background: #020617;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   overflow: hidden;
   pointer-events: none;
 }
@@ -13,34 +9,49 @@
 .bg-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(120px);
-  opacity: 0.25;
-  animation: floatOrb 20s infinite alternate ease-in-out;
+  filter: blur(100px);
+  opacity: 0.03;
+  animation: orbFloat 40s infinite alternate ease-in-out;
 }
 
 .orb-1 {
-  width: 60vh;
-  height: 60vh;
-  background: #22c55e;
-  top: -10vh;
-  left: -10vw;
+  width: 70vh;
+  height: 70vh;
+  background: #8B5CF6;
+  top: -20vh;
+  left: -15vw;
+  animation-duration: 45s;
 }
 
 .orb-2 {
-  width: 70vh;
-  height: 70vh;
-  background: #3b82f6;
-  bottom: -20vh;
+  width: 80vh;
+  height: 80vh;
+  background: #4C1D95;
+  bottom: -25vh;
   right: -10vw;
-  animation-delay: -10s;
-  animation-duration: 25s;
+  animation-delay: -15s;
+  animation-duration: 50s;
 }
 
-@keyframes floatOrb {
+.orb-3 {
+  width: 60vh;
+  height: 60vh;
+  background: #2D2D35;
+  top: 40vh;
+  left: 30vw;
+  opacity: 0.02;
+  animation-delay: -30s;
+  animation-duration: 35s;
+}
+
+@keyframes orbFloat {
   0% {
     transform: translate(0, 0) scale(1);
   }
+  50% {
+    transform: translate(8vw, 6vh) scale(1.15);
+  }
   100% {
-    transform: translate(15vw, 15vh) scale(1.3);
+    transform: translate(-4vw, -8vh) scale(0.9);
   }
 }

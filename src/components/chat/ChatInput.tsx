@@ -3,7 +3,6 @@ import React, { useRef, useEffect, useState, memo } from 'react';
 import { SendHorizontal, Paperclip } from 'lucide-react';
 import { useChatStore } from '../../store/chatStore';
 import { useUser } from '../SupabaseProvider';
-import '../ChatInput.css';
 
 interface ChatInputProps {
   onSendMessage: (_text: string) => void;
@@ -94,35 +93,30 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = false, 
   };
 
   return (
-    <div className="premium-input-container">
-      <div className="input-wrapper">
-        <button type="button" className="attachment-button" title="Attach file (coming soon)">
-          <Paperclip size={20} />
-        </button>
-        
-        <textarea
-          ref={textareaRef}
-          className="premium-textarea"
-          value={text}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder || "Message ThinkRoom AI..."}
-          rows={1}
-          disabled={disabled}
-        />
+    <div className="composer-wrapper">
+      <button type="button" className="composer-attach-btn" title="Attach file (coming soon)">
+        <Paperclip size={20} />
+      </button>
+      
+      <textarea
+        ref={textareaRef}
+        className="composer-textarea"
+        value={text}
+        onChange={handleChange}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder || "Message ThinkRoom AI..."}
+        rows={1}
+        disabled={disabled}
+      />
 
-        <button 
-          type="button" 
-          className={`premium-send-button ${!text.trim() ? 'disabled' : ''}`}
-          onClick={handleSend}
-          disabled={!text.trim() || disabled}
-        >
-          <SendHorizontal size={20} />
-        </button>
-      </div>
-      <div className="input-footer-hint">
-        <b>Shift + Enter</b> for new line
-      </div>
+      <button 
+        type="button" 
+        className={`composer-send-btn ${!text.trim() ? 'disabled' : ''}`}
+        onClick={handleSend}
+        disabled={!text.trim() || disabled}
+      >
+        <SendHorizontal size={20} />
+      </button>
     </div>
   );
 };

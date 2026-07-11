@@ -14,7 +14,7 @@ const Navbar = ({ onEnterChat, onEnterResources }) => {
         <a className="lp-nav-link" href="#tech">TECH</a>
       </div>
       <div className="lp-nav-buttons">
-        <button className="lp-btn lp-btn-primary" onClick={onEnterChat}>SOS</button>
+        <button className="lp-btn lp-tr-btn-primary" onClick={onEnterChat}>SOS</button>
         <button className="lp-btn lp-btn-white" onClick={onEnterResources}>JOIN</button>
       </div>
     </nav>
