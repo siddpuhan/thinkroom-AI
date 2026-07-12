@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef, useContext, lazy, Suspense, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { io } from 'socket.io-client';
 import { useUser, useSupabase } from '@/components/SupabaseProvider';
 import MessageBubble from '../MessageBubble';
@@ -7,11 +8,10 @@ import AnimatedBackground from '../AnimatedBackground';
 import { fetchMessagesApi, sendMessageApi } from '../api/messagesApi';
 import { clearOfflineMessages, getOfflineMessages, queueOfflineMessage, saveOfflineMessages } from '../utils/offlineSync';
 import '../App.css';
-import NetworkStatus from './NetworkStatus';
 import ThemeContext from '../context/ThemeContext';
 import { useChatStore } from '../store/chatStore';
+import { useTaskStore } from '../store/taskStore';
 import ChatInput from './chat/ChatInput';
-import { WorkspaceToggleButton } from './tasks/WorkspaceToggleButton';
 import { logout } from '@/app/actions';
 
 const AITaskWorkspace = lazy(() =>
@@ -92,6 +92,8 @@ const { theme, toggleTheme } = useContext(ThemeContext);
   const addStreamStart = useChatStore(state => state.addStreamStart);
   const appendStreamChunk = useChatStore(state => state.appendStreamChunk);
   const finalizeStream = useChatStore(state => state.finalizeStream);
+  const wsTotalCount = useTaskStore(state => state.totalCount());
+  const wsPendingCount = useTaskStore(state => state.pendingCount());
   
   const currentUserId = user?.id;
   const currentUserIdRef = useRef(currentUserId);
@@ -356,7 +358,6 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       setIsThinking(false);
       addStreamStart(data);
     };
-    const handleStreamChunk = (data) => appendStreamChunk(data.messageId, data.chunk);
     const handleStreamEnd = (data) => {
       const msgData = useChatStore.getState().streamingMessages[data.messageId];
       finalizeStream(data);
@@ -375,15 +376,31 @@ const { theme, toggleTheme } = useContext(ThemeContext);
       }, 50);
     };
 
+    const chunkBuffer = {};
+    let flushTimer = null;
+    const flushChunks = () => {
+      flushTimer = null;
+      Object.entries(chunkBuffer).forEach(([id, acc]) => {
+        if (acc) appendStreamChunk(id, acc);
+      });
+      for (const k in chunkBuffer) delete chunkBuffer[k];
+    };
+    const bufferedHandleStreamChunk = (data) => {
+      chunkBuffer[data.messageId] = (chunkBuffer[data.messageId] || '') + data.chunk;
+      if (!flushTimer) flushTimer = setTimeout(flushChunks, 50);
+    };
+
     socket.on("receive_message", handler);
     socket.on("ai_stream_start", handleStreamStart);
-    socket.on("ai_stream_chunk", handleStreamChunk);
+    socket.on("ai_stream_chunk", bufferedHandleStreamChunk);
     socket.on("ai_stream_end", handleStreamEnd);
 
     return () => {
+      if (flushTimer) clearTimeout(flushTimer);
+      flushChunks();
       socket.off("receive_message", handler);
       socket.off("ai_stream_start", handleStreamStart);
-      socket.off("ai_stream_chunk", handleStreamChunk);
+      socket.off("ai_stream_chunk", bufferedHandleStreamChunk);
       socket.off("ai_stream_end", handleStreamEnd);
     };
   }, [activeRoom, socketInstance, addStreamStart, appendStreamChunk, finalizeStream, scrollToBottom]);
@@ -615,55 +632,135 @@ useEffect(() => {
     <div className="app-workspace">
       <div className="chat-page-container">
 
-        {/* ── Premium Header ── */}
-        <header className="chat-header">
-          <div className="header-left">
-            <span className="header-logo">ThinkRoom</span>
-            {activeRoom && (
-              <div className="header-room-group">
-                <div className="header-room-badge">
-                  <span className="room-hash">#</span>
-                  <span className="room-name">{activeRoom}</span>
-                  <button
-                    type="button"
-                    className="room-leave-btn"
-                    onClick={handleLeaveRoom}
-                    title="Leave room"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className={`room-status-indicator ${isOffline ? 'offline' : ''}`}>
-                  <span className="status-dot" />
-                  <span>{isOffline ? 'Offline' : 'Live'}</span>
-                </div>
+        {/* ── Command Center ── */}
+        <header className="command-center">
+          <div className="cmd-main-row">
+            {/* LEFT */}
+            <div className="cmd-left">
+              <div className="cmd-brand">
+                <motion.div
+                  className="cmd-brand-dot"
+                  animate={{ boxShadow: ['0 0 12px rgba(139,92,246,0.35)', '0 0 20px rgba(139,92,246,0.5)', '0 0 12px rgba(139,92,246,0.35)'] }}
+                  transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+                />
+                <span className="cmd-brand-text">ThinkRoom</span>
               </div>
-            )}
+              {activeRoom && (
+                <div className="cmd-room-pill">
+                  <span className="hash">#</span>
+                  <span className="rname">{activeRoom}</span>
+                  <button type="button" className="cmd-leave-btn" onClick={handleLeaveRoom} title="Leave room">✕</button>
+                </div>
+              )}
+            </div>
+
+            {/* CENTER */}
+            <div className="cmd-center">
+              {activeRoom && (
+                <>
+                  <div className="cmd-room-title">#{activeRoom}</div>
+                  <div className="cmd-meta-row">
+                    <div className={`cmd-live ${isOffline ? 'offline' : ''}`}>
+                      <span className="cmd-live-dot" />
+                      <span>{isOffline ? 'Offline' : 'Connected'}</span>
+                    </div>
+                    <span className="cmd-sep" />
+                    <span className="cmd-meta-text">
+                      {isOffline ? 'no connection' : 'Live \u2022 25ms'}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* RIGHT */}
+            <div className="cmd-right">
+              {activeRoom && (
+                <motion.button
+                  className="cmd-ws-btn"
+                  onClick={() => useTaskStore.getState().togglePanel()}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.97 }}
+                  title="AI Workspace"
+                >
+                  <span className="ws-sparkle">✨</span>
+                  <span className="ws-label">Workspace</span>
+                  {wsTotalCount > 0 && (
+                    <span className="ws-count">{wsTotalCount}</span>
+                  )}
+                  {wsPendingCount > 0 && (
+                    <motion.span
+                      className="ws-pending"
+                      animate={{ opacity: [1, 0.5, 1], scale: [1, 1.3, 1] }}
+                      transition={{ repeat: Infinity, duration: 1.5 }}
+                    />
+                  )}
+                </motion.button>
+              )}
+              <motion.button
+                className="cmd-btn cmd-btn-icon"
+                onClick={toggleTheme}
+                title="Toggle theme"
+                whileHover={{ rotate: 15 }}
+                transition={{ duration: 0.2 }}
+              >
+                {theme === 'dark' ? '☀️' : '🌙'}
+              </motion.button>
+              <motion.div
+                className="cmd-avatar"
+                whileHover={{ scale: 1.05 }}
+                title={currentUserNameRef.current || 'User'}
+              >
+                {user?.user_metadata?.avatar_url || user?.user_metadata?.picture ? (
+                  <img src={user.user_metadata.avatar_url || user.user_metadata.picture} alt="" />
+                ) : (
+                  (currentUserNameRef.current?.[0] || user?.email?.[0] || '?').toUpperCase()
+                )}
+              </motion.div>
+              <form action={logout}>
+                <motion.button
+                  type="submit"
+                  className="cmd-btn cmd-btn-icon"
+                  title="Sign Out"
+                  whileHover={{ scale: 1.05 }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                </motion.button>
+              </form>
+            </div>
           </div>
-          <div className="header-center">
-            {activeRoom && (
-              <>
-                <span className="header-room-name-display">#{activeRoom}</span>
-                <span className="header-participants">● {isOffline ? '0 connected' : 'Connected'}</span>
-              </>
-            )}
-            {activeRoom && <NetworkStatus queuedCount={queuedCount} />}
-          </div>
-          <div className="header-right">
-            {activeRoom && <WorkspaceToggleButton />}
-            <button
-              onClick={toggleTheme}
-              className="header-icon-btn"
-              title="Toggle theme"
-            >
-              {theme === 'dark' ? '☀️' : '🌙'}
-            </button>
-            <form action={logout}>
-              <button type="submit" className="header-icon-btn sign-out" title="Sign Out">
-                ⇤
-              </button>
-            </form>
-          </div>
+
+          {/* ── Info Strip ── */}
+          {activeRoom && (
+            <div className="cmd-info-strip">
+              <span className="cmd-pill">
+                <span className="pill-dot green" />
+                <span className="pill-count">{messages.length}</span> messages
+              </span>
+              <span className="cmd-pill">
+                <span className={`pill-dot ${isThinking ? 'purple' : 'gray'}`} />
+                AI {isThinking ? 'thinking\u2026' : 'active'}
+              </span>
+              <span className="cmd-pill">
+                <span className={`pill-dot ${socketInstance ? 'green' : 'gray'}`} />
+                Socket {socketInstance ? 'connected' : 'disconnected'}
+              </span>
+              <span className="cmd-pill">
+                <span className="pill-dot blue" />
+                Private room
+              </span>
+              {queuedCount > 0 && (
+                <span className="cmd-pill">
+                  <span className="pill-dot yellow" />
+                  {queuedCount} queued
+                </span>
+              )}
+            </div>
+          )}
         </header>
 
         {/* ── Body ── */}

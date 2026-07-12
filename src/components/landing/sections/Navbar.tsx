@@ -57,7 +57,7 @@ export default function Navbar({ onSignIn, onGetStarted }: { onSignIn?: () => vo
         className="flex items-center justify-between w-full h-full px-8 md:px-10 rounded-[999px]"
         style={{
               background: "#B084D7",
-          border: "1.5px solid rgba(26, 26, 26, 0.15)",
+          border: "1.5px solid #1A1A1A",
           boxShadow: scrolled
             ? "0 8px 32px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.6)"
             : "0 4px 16px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)",
@@ -191,7 +191,7 @@ export default function Navbar({ onSignIn, onGetStarted }: { onSignIn?: () => vo
             className="md:hidden mt-2 rounded-[24px] overflow-hidden"
             style={{
           background: "#B084D7",
-              border: "1.5px solid rgba(26, 26, 26, 0.15)",
+              border: "1.5px solid #1A1A1A",
               boxShadow: "0 8px 32px rgba(0,0,0,0.08)",
             }}
           >
