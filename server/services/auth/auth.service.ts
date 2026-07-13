@@ -14,16 +14,32 @@ export class AuthService {
    */
   public static requireAuth = async (req: any, res: any, next: NextFunction) => {
     try {
+      console.log("\n=========================");
+      console.log("REQUEST:", req.originalUrl);
+
       const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Missing authorization header' });
+      console.log("AUTH HEADER:", authHeader?.substring(0, 50));
+
+      if (!authHeader?.startsWith("Bearer ")) {
+        console.log("❌ No Bearer token");
+        return res.status(401).json({ error: "Missing authorization header" });
       }
 
       const token = authHeader.slice(7);
+
+      console.log("TOKEN LENGTH:", token.length);
+      console.log("SUPABASE URL:", SUPABASE_URL);
+
       const { data: { user }, error } = await supabase.auth.getUser(token);
 
+      console.log("USER:", user);
+      console.log("ERROR:", error);
+
       if (error || !user) {
-        return res.status(401).json({ error: 'Invalid or expired token' });
+        return res.status(401).json({
+          error: "Invalid or expired token",
+          supabaseError: error,
+        });
       }
 
       req.user = {
@@ -31,10 +47,13 @@ export class AuthService {
         email: user.email,
         ...(user.user_metadata || {}),
       };
+
+      console.log("✅ AUTH PASSED");
+
       next();
     } catch (e) {
-      console.error('Token verification error:', e);
-      return res.status(401).json({ error: 'Token verification failed' });
+      console.error("Token verification error:", e);
+      return res.status(401).json({ error: "Token verification failed" });
     }
   };
 
